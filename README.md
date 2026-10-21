@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PriceAFirm
 
-## Getting Started
+Blind valuation-contribution and business-discovery network for businesses already listed for sale.
+Members value listings (one EV estimate + Low/Medium/High confidence), earn or lose points as later
+independent valuations arrive, and spend 1 point to reveal a rights-cleared original listing URL.
 
-First, run the development server:
+Stack (same as fundstamp.com): Next.js 16 (App Router, TypeScript, Tailwind v4) on Vercel,
+Supabase (Postgres + Auth magic links), Node 24.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Layout
+
+```
+supabase/migrations/0001_schema.sql   tables, RPCs (reveal_url, submit_forecast, post_score_change), RLS
+supabase/seed.sql                      source-domain policy (BizBuySell blocked) + fictional dev listings
+src/lib/quant/model.ts                 pure engine: kernels, opinion pool, frozen bounds, peer-predictive score
+src/lib/quant/service.ts               I/O: valuation question, seal forecast, recompute, aggregates, skill
+src/lib/quant/simulate.ts              offline adversarial simulation harness
+src/lib/sources/                       URL normalize, allowlist/blocklist, SSRF-safe fetch, fact extraction
+src/lib/search/                        natural-language search -> filter chips -> deterministic filtering
+src/lib/actions/                       server actions (all auth + eligibility checks are server-side)
+src/app/                               screens: /value, /value/[id], /deals, /add, /points, /unlocked, /admin
+src/proxy.ts                           session refresh + sign-in gate
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+cp .env.example .env.local        # fill in Supabase URL, anon key, service role key, SESSION_SECRET, CRON_SECRET
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Tests and checks:
 
-## Learn More
+```bash
+npx vitest run                    # engine, URL normalization, extraction, search parsing
+npx tsx src/lib/quant/simulate.ts # scoring simulation (honest vs strategic judges)
+npm run lint && npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Supabase
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Create a project named `priceafirm` (region near Vercel's us-east is fine).
+2. Run `supabase/migrations/0001_schema.sql` in the SQL editor (or `supabase db push` with the CLI).
+3. Run `supabase/seed.sql` for dev data. Delete the fictional listings before the pilot.
+4. Auth: enable Email provider with magic links; set Site URL to the Vercel domain and add
+   `https://<domain>/auth/callback` to Redirect URLs. Disable "Confirm email" double opt-in if you want
+   one-click sign-in; magic links already verify ownership.
+5. Copy the project URL, anon key and service role key into Vercel env vars.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Member-facing tables are RLS-protected and read-only; every write goes through security-definer RPCs or
+the service role from server actions. `listing_sources.source_url` has no member policy at all: the only
+path to a URL is the `reveal_url` RPC (atomic 1-point charge) or the caller's own `/unlocked` page.
 
-## Deploy on Vercel
+## Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Create the project from the Git repo (framework Next.js, Node 24). Environment variables:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Key | Value |
+|---|---|
+| NEXT_PUBLIC_SUPABASE_URL | from Supabase |
+| NEXT_PUBLIC_SUPABASE_ANON_KEY | from Supabase |
+| SUPABASE_SERVICE_ROLE_KEY | from Supabase (secret) |
+| APP_URL | https://priceafirm.com (or the vercel.app domain) |
+| ADMIN_EMAILS | comma-separated admin emails |
+| SESSION_SECRET | `openssl rand -base64 48` |
+| CRON_SECRET | `openssl rand -base64 48` (vercel.json cron sends it as a bearer token) |
+| INVITE_ONLY | `1` for the pilot |
+| SCORING_MODE | `shadow` until the simulation gate is passed, then `live` |
+| ANTHROPIC_API_KEY | optional; enables LLM parsing of search intent |
+
+`vercel.json` schedules `/api/cron/recompute` daily; it re-runs scoring idempotently and refreshes skill
+percentiles. Score deltas are keyed per (forecast, trigger), so re-runs never mint duplicate points.
+
+## Pilot operations
+
+- Invite buyers at `/admin` (Invites tab); only invited emails or ADMIN_EMAILS can use the app while
+  `INVITE_ONLY=1`.
+- Approve new source domains and user-submitted listings in `/admin` after rights review. BizBuySell and
+  BizQuest are hard-blocked in code and in `source_domains`.
+- Start with `SCORING_MODE=shadow`: forecasts are sealed with frozen bounds and scores are computed and
+  logged in `score_evaluations`, but no point deltas post. Switch to `live` once the simulation and pilot
+  checks in the design's Section 16 pass.
+
+## What the numbers mean (and don't)
+
+Crowd values are model-derived from a conservative opinion pool (ask benchmark + confidence-weighted
+lognormal kernels, capped per person, shrunk by effective participation). They are not offers, appraisals
+or observed prices. Scores are a peer-predictive proxy (did a forecast improve predictions of later
+independent forecasts?), not verified accuracy. The UI labels both accordingly.

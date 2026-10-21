@@ -1,0 +1,44 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/auth/session";
+import { Logo } from "@/components/Logo";
+import { LoginForm } from "./LoginForm";
+
+export const dynamic = "force-dynamic";
+
+export const metadata = { title: "Sign in" };
+
+function safeNext(raw: string | string[] | undefined): string {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v || !v.startsWith("/") || v.startsWith("//")) return "/value";
+  return v;
+}
+
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const sp = await searchParams;
+  const next = safeNext(sp.next);
+  const user = await getSessionUser();
+  if (user) redirect(next);
+  const error = typeof sp.error === "string" ? sp.error : null;
+
+  return (
+    <div className="flex min-h-full flex-1 flex-col">
+      <header className="mx-auto flex h-14 w-full max-w-6xl items-center px-4">
+        <Link href="/" aria-label="PriceAFirm home">
+          <Logo />
+        </Link>
+      </header>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 pb-24">
+        <h1 className="text-2xl">Sign in</h1>
+        <p className="mt-2 text-sm text-muted">We email you a one-time sign-in link. No password to remember.</p>
+        <div className="card card-pad mt-6">
+          <LoginForm next={next} initialError={error === "callback" ? "That sign-in link did not work. It may have expired; request a new one." : null} />
+        </div>
+        <p className="mt-4 text-xs text-muted">
+          PriceAFirm is an invited pilot. Signing in creates an account; if your email is not on the invite list you will see a waitlist page. By continuing
+          you agree to the <Link href="/terms" className="underline">Terms</Link> and <Link href="/privacy" className="underline">Privacy</Link> notes.
+        </p>
+      </main>
+    </div>
+  );
+}

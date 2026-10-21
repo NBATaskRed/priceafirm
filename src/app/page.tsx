@@ -1,69 +1,142 @@
-import Image from "next/image";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/auth/session";
+import { Logo } from "@/components/Logo";
+import { ButtonLink, PointsRange } from "@/components/ui";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Landing() {
+  const user = await getSessionUser();
+  if (user) redirect("/value");
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex min-h-full flex-1 flex-col">
+      <header className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
+        <Logo />
+        <nav className="flex items-center gap-1 text-sm">
+          <Link href="/terms" className="nav-link">
+            Terms
+          </Link>
+          <Link href="/privacy" className="nav-link">
+            Privacy
+          </Link>
+          <ButtonLink href="/login" variant="secondary" size="sm" className="ml-2">
+            Sign in
+          </ButtonLink>
+        </nav>
+      </header>
+
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20">
+        <section className="grid gap-10 pt-12 lg:grid-cols-[1.15fr_1fr] lg:gap-16 lg:pt-20">
+          <div className="max-w-xl">
+            <h1 className="text-[2.1rem] leading-[1.08] sm:text-[2.75rem]">Find businesses other buyers may undervalue. Share your opinion to unlock more deals.</h1>
+            <p className="mt-5 max-w-lg text-[1.05rem] text-muted">
+              PriceAFirm pools independent, confidence-labeled valuations of businesses already listed for sale. You contribute a blind estimate, earn a
+              signed point balance as later opinions arrive, and spend points to reveal the original listings behind the opportunities you like.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <ButtonLink href="/login" size="lg">
+                Sign in with email
+              </ButtonLink>
+              <span className="text-sm text-muted">Invited pilot. New accounts start with 3.0 points.</span>
+            </div>
+          </div>
+
+          {/* The one bold element: a worked example of the reward contract, not a stat tile. */}
+          <aside className="card self-start p-5 sm:p-6" aria-label="How a valuation is scored">
+            <p className="text-sm text-muted">One listing snapshot</p>
+            <p className="mt-1 text-lg font-semibold">HVAC services</p>
+            <p className="text-sm text-muted">Mechanical contracting · Southeast US · FL · Tampa Bay</p>
+            <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
+              <div>
+                <dt className="text-xs text-muted">Ask</dt>
+                <dd className="figures text-base">$2.9M</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Revenue</dt>
+                <dd className="figures text-base">$3.2M</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">SDE</dt>
+                <dd className="figures text-base">$680K</dd>
+              </div>
+            </dl>
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="text-sm font-medium">What do you think this business is worth?</p>
+              <p className="mt-1 text-xs text-muted">Cash-free, debt-free enterprise value. One number plus your confidence.</p>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li className="flex items-center justify-between gap-3">
+                  <span>Low confidence</span>
+                  <PointsRange maxLoss={1} maxGain={2} />
+                </li>
+                <li className="flex items-center justify-between gap-3">
+                  <span>Medium confidence</span>
+                  <PointsRange maxLoss={4} maxGain={7} />
+                </li>
+                <li className="flex items-center justify-between gap-3">
+                  <span>High confidence</span>
+                  <PointsRange maxLoss={8} maxGain={12} />
+                </li>
+              </ul>
+              <p className="mt-3 text-xs text-muted">Possible point range for the first valuation on a listing. Ranges shrink as more independent opinions arrive.</p>
+            </div>
+          </aside>
+        </section>
+
+        <section className="mt-20 grid gap-8 border-t border-border pt-12 md:grid-cols-3" aria-label="How it works">
+          <Step n={1} title="Value a business blind">
+            See only neutral listing facts: industry, location, ask, revenue and earnings. Submit one enterprise value estimate with Low, Medium or High
+            confidence. Your possible gain and loss are frozen the moment you submit.
+          </Step>
+          <Step n={2} title="Your balance moves as others weigh in">
+            Each later independent valuation re-scores yours against how well it predicted the crowd. Scores can go up or down. Your balance may rise or
+            fall as additional independent opinions arrive.
+          </Step>
+          <Step n={3} title="Spend points on deals you want">
+            Search in plain language, preview opportunities free, read the model-derived crowd view, and reveal the original listing URL for 1 point.
+            Previewing a deal makes you ineligible to earn points on that business.
+          </Step>
+        </section>
+
+        <section className="mt-16 max-w-2xl text-sm text-muted">
+          <p>
+            Crowd figures are model-derived, not offers or observed prices. Scores measure agreement with later independent opinions, not verified
+            accuracy. Points are not cash and carry no monetary value. Listings come only from sources that have cleared a rights review.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+        </section>
       </main>
+
+      <footer className="border-t border-border">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-5 text-xs text-muted">
+          <span>PriceAFirm, an invited pilot.</span>
+          <span className="flex gap-4">
+            <Link href="/terms" className="hover:text-text">
+              Terms
+            </Link>
+            <Link href="/privacy" className="hover:text-text">
+              Privacy
+            </Link>
+          </span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-4">
+      <span className="figures mt-0.5 inline-grid h-7 w-7 flex-none place-content-center rounded-full border border-border-strong text-sm font-semibold" aria-hidden="true">
+        {n}
+      </span>
+      <div>
+        <h2 className="text-base font-semibold">
+          <span className="sr-only">Step {n}: </span>
+          {title}
+        </h2>
+        <p className="mt-1.5 text-sm text-muted">{children}</p>
+      </div>
     </div>
   );
 }
