@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { ListingSnapshot, SourceRights } from "@/lib/domain/types";
+import type { ListingSnapshot, SourceDomain } from "@/lib/domain/types";
 import { isBlockedDomain, normalizeUrl, urlHash } from "./normalize";
 import { safeFetch } from "./safeFetch";
 import { extractListingFacts, type ExtractedFacts } from "./extract";
@@ -12,69 +12,70 @@ export { extractListingFacts, type ExtractedFacts } from "./extract";
 export { regionForState, stateCode, US_STATES, REGIONS } from "./usStates";
 
 /**
- * URL ingestion (design Section 9): normalize -> hard blocklist -> rights check -> dedupe ->
- * safe fetch + extraction -> snapshot creation. Blocked domains are rejected before any database
- * or network call, and BizBuySell / BizQuest are never fetched.
+ * URL ingestion (design v2.2, Section 9): permissionless sources with removal on complaint.
+ * normalize -> hard exclusion list -> source check (blocked / removed / allowed) -> dedupe ->
+ * safe fetch + extraction -> snapshot creation. The hard exclusion list (BizBuySell, BizQuest) is
+ * checked before any database or network call and those domains are never fetched.
  */
 
-export type SourceStatus = "allowed" | "blocked" | "review" | "unknown";
+export type SourceStatus = "allowed" | "blocked" | "removed";
 
 export interface SourceCheck {
   status: SourceStatus;
-  rights: SourceRights | null;
+  source: SourceDomain | null;
   message: string;
 }
 
-const BLOCKED_MESSAGE = "This source does not permit listing data to be fetched or stored. PriceAFirm does not accept URLs from it.";
+const BLOCKED_MESSAGE = "This source is on PriceAFirm's excluded list. URLs from it are not accepted.";
+const REMOVED_MESSAGE = "This source asked to be removed from PriceAFirm. URLs from it are no longer accepted.";
 
-function rowToRights(row: Record<string, unknown>): SourceRights {
+function rowToSource(row: Record<string, unknown>): SourceDomain {
   return {
     domain: String(row.domain),
-    status: row.status as SourceRights["status"],
+    status: row.status as SourceDomain["status"],
+    source_type: (row.source_type as SourceDomain["source_type"]) ?? "third_party",
     publisher: (row.publisher as string | null) ?? null,
-    may_fetch: Boolean(row.may_fetch),
-    may_store: Boolean(row.may_store),
-    may_display_ask: Boolean(row.may_display_ask),
-    may_display_ev_to_ask: Boolean(row.may_display_ev_to_ask),
-    may_show_anonymous_preview: Boolean(row.may_show_anonymous_preview),
-    may_link_original_listing: Boolean(row.may_link_original_listing),
-    attribution_required: Boolean(row.attribution_required),
-    revoked_at: (row.revoked_at as string | null) ?? null,
+    attribution_text: (row.attribution_text as string | null) ?? null,
+    complaint_received_at: (row.complaint_received_at as string | null) ?? null,
+    removed_at: (row.removed_at as string | null) ?? null,
+    removal_reason: (row.removal_reason as string | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
   };
 }
 
+function cleanDomain(domain: string): string {
+  return domain.trim().toLowerCase().replace(/^www\./, "");
+}
+
+/** Blocked if on the hard list or excluded in the table; removed if a complaint took it down; otherwise allowed. */
 export async function checkSource(domain: string): Promise<SourceCheck> {
-  const d = domain.trim().toLowerCase().replace(/^www\./, "");
-  if (isBlockedDomain(d)) {
-    return { status: "blocked", rights: null, message: BLOCKED_MESSAGE };
-  }
+  const d = cleanDomain(domain);
+  if (isBlockedDomain(d)) return { status: "blocked", source: null, message: BLOCKED_MESSAGE };
   const { data, error } = await supabaseAdmin().from("source_domains").select("*").eq("domain", d).maybeSingle();
   if (error) throw error;
-  if (!data) {
-    return {
-      status: "unknown",
-      rights: null,
-      message: `${d} has not been reviewed yet. You can submit the URL for a rights review; nothing will be fetched until an admin approves the source.`,
-    };
-  }
-  const rights = rowToRights(data as Record<string, unknown>);
-  if (rights.status === "blocked" || rights.revoked_at) {
-    return { status: "blocked", rights, message: BLOCKED_MESSAGE };
-  }
-  if (rights.status === "review") {
-    return {
-      status: "review",
-      rights,
-      message: `${d} is under rights review. You can submit the URL; it will be held until the review completes.`,
-    };
-  }
-  return { status: "allowed", rights, message: rights.may_fetch ? "Approved source." : "Approved source (manual entry only)." };
+  if (!data) return { status: "allowed", source: null, message: "New source; it will be recorded on first submission." };
+  const source = rowToSource(data as Record<string, unknown>);
+  if (source.status === "blocked" || source.source_type === "excluded") return { status: "blocked", source, message: BLOCKED_MESSAGE };
+  if (source.removed_at) return { status: "removed", source, message: REMOVED_MESSAGE };
+  return { status: "allowed", source, message: source.source_type === "operator" ? "Operator source." : "Third-party source." };
+}
+
+/** Upsert the source_domains row for an allowed domain (status allowed, third_party, first_seen now) and return it. */
+async function ensureSourceRow(domain: string, existing: SourceDomain | null): Promise<SourceDomain> {
+  if (existing) return existing;
+  const db = supabaseAdmin();
+  const { error } = await db
+    .from("source_domains")
+    .upsert({ domain, status: "allowed", source_type: "third_party", first_seen: new Date().toISOString() }, { onConflict: "domain", ignoreDuplicates: true });
+  if (error) throw error;
+  const { data } = await db.from("source_domains").select("*").eq("domain", domain).maybeSingle();
+  if (!data) throw new Error(`Could not record source ${domain}`);
+  return rowToSource(data as Record<string, unknown>);
 }
 
 export type ValidationResult =
   | { status: "blocked"; message: string; domain: string }
   | { status: "invalid"; message: string }
-  | { status: "unknown_source"; message: string; domain: string; url: string; canonicalKey: string }
   | {
       status: "existing";
       businessId: string;
@@ -89,8 +90,9 @@ export type ValidationResult =
       url: string;
       domain: string;
       canonicalKey: string;
-      rights: SourceRights;
+      source: SourceDomain;
       facts: ExtractedFacts;
+      /** Set only when the fetch failed; the user then enters facts manually. */
       fetchError?: string;
     };
 
@@ -110,20 +112,18 @@ async function logSubmission(row: {
   if (error) throw error;
 }
 
-async function latestSnapshot(businessId: string, preferApproved = true): Promise<ListingSnapshot | null> {
+async function latestSnapshot(businessId: string): Promise<ListingSnapshot | null> {
   const db = supabaseAdmin();
-  if (preferApproved) {
-    const { data } = await db
-      .from("listing_snapshots")
-      .select("*")
-      .eq("business_id", businessId)
-      .eq("status", "approved")
-      .order("version", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data) return data as ListingSnapshot;
-  }
-  const { data } = await db
+  const approved = await db
+    .from("listing_snapshots")
+    .select("*")
+    .eq("business_id", businessId)
+    .eq("status", "approved")
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (approved.data) return approved.data as ListingSnapshot;
+  const any = await db
     .from("listing_snapshots")
     .select("*")
     .eq("business_id", businessId)
@@ -131,7 +131,7 @@ async function latestSnapshot(businessId: string, preferApproved = true): Promis
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as ListingSnapshot | null) ?? null;
+  return (any.data as ListingSnapshot | null) ?? null;
 }
 
 async function findExistingBusiness(urlHashValue: string, canonicalKey: string): Promise<string | null> {
@@ -151,34 +151,28 @@ export async function validateSubmittedUrl(raw: string, userId: string): Promise
   const norm = normalizeUrl(raw);
   if (!norm.ok) return { status: "invalid", message: norm.reason };
   const { url, domain, canonicalKey } = norm;
+  const submittedUrl = raw.trim().slice(0, 2048);
 
-  // Hard block before any database or network access.
+  // Hard exclusion before any database or network access.
   if (isBlockedDomain(domain)) {
-    await logSubmission({
-      user_id: userId,
-      submitted_url: raw.trim().slice(0, 2048),
-      normalized_url: url,
-      domain,
-      status: "rejected",
-      reason: "blocked_domain",
-    });
+    await logSubmission({ user_id: userId, submitted_url: submittedUrl, normalized_url: url, domain, status: "rejected", reason: "blocked_domain" });
     return { status: "blocked", message: BLOCKED_MESSAGE, domain };
   }
 
-  const source = await checkSource(domain);
-  if (source.status === "blocked") {
+  const check = await checkSource(domain);
+  if (check.status !== "allowed") {
     await logSubmission({
       user_id: userId,
-      submitted_url: raw.trim().slice(0, 2048),
+      submitted_url: submittedUrl,
       normalized_url: url,
       domain,
       status: "rejected",
-      reason: source.rights?.revoked_at ? "source_revoked" : "source_blocked",
+      reason: check.status === "removed" ? "source_removed" : "source_blocked",
     });
-    return { status: "blocked", message: source.message, domain };
+    return { status: "blocked", message: check.message, domain };
   }
 
-  // Dedupe before anything else so a known business is never re-fetched.
+  // Dedupe before fetching so a known business is never re-fetched.
   const existingBusinessId = await findExistingBusiness(urlHash(url), canonicalKey);
   if (existingBusinessId) {
     const snapshot = await latestSnapshot(existingBusinessId);
@@ -199,21 +193,10 @@ export async function validateSubmittedUrl(raw: string, userId: string): Promise
     }
   }
 
-  if (source.status === "unknown" || source.status === "review" || !source.rights) {
-    return { status: "unknown_source", message: source.message, domain, url, canonicalKey };
-  }
-
-  const rights = source.rights;
-  if (!rights.may_fetch) {
-    return { status: "new", url, domain, canonicalKey, rights, facts: EMPTY_FACTS, fetchError: "Source approved for manual entry only" };
-  }
-
+  const source = await ensureSourceRow(domain, check.source);
   const fetched = await safeFetch(url, domain);
-  if (!fetched.ok) {
-    return { status: "new", url, domain, canonicalKey, rights, facts: EMPTY_FACTS, fetchError: fetched.reason };
-  }
-  const facts = extractListingFacts(fetched.html, fetched.finalUrl);
-  return { status: "new", url, domain, canonicalKey, rights, facts };
+  if (!fetched.ok) return { status: "new", url, domain, canonicalKey, source, facts: EMPTY_FACTS, fetchError: fetched.reason };
+  return { status: "new", url, domain, canonicalKey, source, facts: extractListingFacts(fetched.html, fetched.finalUrl) };
 }
 
 export interface SubmissionFacts {
@@ -224,7 +207,6 @@ export interface SubmissionFacts {
   state?: string | null;
   metro?: string | null;
   askingPrice?: number | null;
-  askBasis?: "ev" | "equity" | "assets" | "unknown";
   revenue?: number | null;
   revenuePeriod?: string | null;
   earnings?: number | null;
@@ -241,7 +223,10 @@ export interface CreateSnapshotInput {
   domain: string;
   canonicalKey: string;
   facts: SubmissionFacts;
+  /** Facts from the fetch; null when the fetch failed and the user entered everything manually. */
   extracted: ExtractedFacts | null;
+  /** The fetch error from validateSubmittedUrl, when there was one. Triggers pending_review. */
+  fetchError?: string | null;
   listingTitleRaw?: string | null;
 }
 
@@ -263,30 +248,20 @@ function num(n: number | null | undefined): number | null {
 
 export async function createSnapshotFromSubmission(input: CreateSnapshotInput): Promise<CreateSnapshotResult> {
   const db = supabaseAdmin();
-  const { userId, url, domain, canonicalKey, facts, extracted } = input;
+  const { userId, url, canonicalKey, facts, extracted } = input;
+  const domain = cleanDomain(input.domain);
   const submittedUrl = url.slice(0, 2048);
 
-  if (isBlockedDomain(domain)) throw new Error("Blocked domain cannot be stored");
-
-  // Rights decide approval.
-  const source = await checkSource(domain);
-  if (source.status === "blocked") throw new Error("Blocked domain cannot be stored");
-  const rights = source.rights;
-
-  // Ensure a source_domains row exists for the FK (unknown domains get a 'review' row).
-  if (!rights) {
-    const { error } = await db.from("source_domains").upsert({ domain, status: "review" }, { onConflict: "domain", ignoreDuplicates: true });
-    if (error) throw error;
-  }
+  const check = await checkSource(domain);
+  if (check.status !== "allowed") throw new Error(`Source ${domain} is ${check.status} and cannot be stored`);
+  const source = await ensureSourceRow(domain, check.source);
 
   // Business: reuse on canonical_key conflict.
   const upsertBiz = await db.from("businesses").upsert({ canonical_key: canonicalKey }, { onConflict: "canonical_key", ignoreDuplicates: false }).select("id").single();
   if (upsertBiz.error || !upsertBiz.data) throw upsertBiz.error ?? new Error("Could not create business");
   const businessId = (upsertBiz.data as { id: string }).id;
 
-  // Duplicate: a live snapshot already exists for this business.
-  const existing = await latestSnapshot(businessId);
-  if (existing) {
+  const duplicate = async (snapshotId: string): Promise<CreateSnapshotResult> => {
     await logSubmission({
       user_id: userId,
       submitted_url: submittedUrl,
@@ -295,10 +270,13 @@ export async function createSnapshotFromSubmission(input: CreateSnapshotInput): 
       status: "duplicate",
       reason: "snapshot_exists",
       business_id: businessId,
-      snapshot_id: existing.id,
+      snapshot_id: snapshotId,
     });
-    return { status: "duplicate", businessId, snapshotId: existing.id };
-  }
+    return { status: "duplicate", businessId, snapshotId };
+  };
+
+  const existing = await latestSnapshot(businessId);
+  if (existing) return duplicate(existing.id);
 
   const state = facts.state ? facts.state.trim().toUpperCase().slice(0, 2) : null;
   const region = clean(facts.region) ?? (state ? regionForState(state) : null);
@@ -317,7 +295,6 @@ export async function createSnapshotFromSubmission(input: CreateSnapshotInput): 
     metro: clean(facts.metro, 80),
     asking_price: num(facts.askingPrice),
     ask_currency: "USD",
-    ask_basis: facts.askBasis ?? "unknown",
     revenue: num(facts.revenue),
     revenue_period: clean(facts.revenuePeriod, 40),
     earnings,
@@ -328,37 +305,29 @@ export async function createSnapshotFromSubmission(input: CreateSnapshotInput): 
     deal_terms_note: clean(facts.dealTermsNote, 500),
   };
 
-  const approved = Boolean(rights && rights.status === "allowed" && rights.may_store && !rights.revoked_at);
-  const status: "approved" | "pending_review" = approved ? "approved" : "pending_review";
+  // Approved whenever the source is live (operator or third_party, not removed). Manual entry after a failed
+  // fetch is the only path that waits for review.
+  const manualEntry = Boolean(input.fetchError) || extracted == null;
+  const live = (source.source_type === "operator" || source.source_type === "third_party") && !source.removed_at;
+  const status: "approved" | "pending_review" = live && !manualEntry ? "approved" : "pending_review";
 
   const snapInsert = await db
     .from("listing_snapshots")
     .insert({
       ...stored,
+      independent_count: 0,
       content_hash: contentHash(stored),
       status,
       submitted_by: userId,
-      approved_at: approved ? new Date().toISOString() : null,
+      approved_at: status === "approved" ? new Date().toISOString() : null,
     })
     .select("id")
     .single();
 
   if (snapInsert.error || !snapInsert.data) {
-    // A concurrent submission may have won the (business_id, version) race; treat as duplicate.
+    // A concurrent submission may have won the (business_id, version) race.
     const raced = await latestSnapshot(businessId);
-    if (raced) {
-      await logSubmission({
-        user_id: userId,
-        submitted_url: submittedUrl,
-        normalized_url: url,
-        domain,
-        status: "duplicate",
-        reason: "snapshot_exists",
-        business_id: businessId,
-        snapshot_id: raced.id,
-      });
-      return { status: "duplicate", businessId, snapshotId: raced.id };
-    }
+    if (raced) return duplicate(raced.id);
     throw snapInsert.error ?? new Error("Could not create snapshot");
   }
   const snapshotId = (snapInsert.data as { id: string }).id;
@@ -377,16 +346,16 @@ export async function createSnapshotFromSubmission(input: CreateSnapshotInput): 
         includesInventory: extracted.includesInventory ?? null,
         includesRealEstate: extracted.includesRealEstate ?? null,
       }
-    : {};
+    : { fetchError: input.fetchError ?? "not fetched" };
 
   const srcInsert = await db.from("listing_sources").insert({
     snapshot_id: snapshotId,
     source_url: url,
     source_url_hash: urlHash(url),
-    broker_name: rights?.publisher ?? null,
+    broker_name: source.publisher ?? domain,
     listing_title_raw: clean(input.listingTitleRaw ?? extracted?.title ?? null, 300),
     extracted: extractedJson,
-    fetched_at: extracted && Object.keys(extracted.fields).length ? new Date().toISOString() : null,
+    fetched_at: extracted ? new Date().toISOString() : null,
   });
   if (srcInsert.error) throw srcInsert.error;
 
@@ -396,7 +365,7 @@ export async function createSnapshotFromSubmission(input: CreateSnapshotInput): 
     normalized_url: url,
     domain,
     status,
-    reason: approved ? null : rights ? "source_not_storable" : "source_unreviewed",
+    reason: status === "approved" ? null : manualEntry ? "manual_entry_after_fetch_failure" : "source_not_live",
     business_id: businessId,
     snapshot_id: snapshotId,
   });

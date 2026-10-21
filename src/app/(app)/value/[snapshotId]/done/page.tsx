@@ -3,9 +3,12 @@ import { notFound, redirect } from "next/navigation";
 import { requireMember } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadCrowdStats, loadRights } from "@/lib/discovery/listings";
-import type { ForecastRow, ListingSnapshot } from "@/lib/domain/types";
+import { fmtMoney, type ForecastRow, type ListingSnapshot } from "@/lib/domain/types";
 import { CrowdStats } from "@/components/CrowdStats";
-import { BALANCE_SENTENCE, ButtonLink, CONFIDENCE_LABEL, Card, EvidenceBadge, Money, Points, PointsRange, fmtDate, locationText } from "@/components/ui";
+import { BALANCE_SENTENCE, ButtonLink, CONFIDENCE_LABEL, Card, EvidenceBadge, Money, Points, ScoreRange, fmtDate, locationText } from "@/components/ui";
+import { RevealUrl } from "@/components/RevealUrl";
+import { assumedRange } from "@/lib/domain/assumed";
+import { impliedMultiple } from "@/components/ValuationForm";
 
 export const metadata = { title: "Valuation sealed" };
 
@@ -22,12 +25,20 @@ export default async function DonePage({ params }: PageProps<"/value/[snapshotId
   if (!s) notFound();
 
   const { data: fc } = await admin.from("forecast_submissions").select("*").eq("user_id", user.id).eq("business_id", s.business_id).maybeSingle();
-  const f = (fc as ForecastRow | null) ?? null;
+  const f = (fc as (ForecastRow & { rationale: string | null }) | null) ?? null;
   if (!f) redirect(`/value/${snapshotId}`);
 
   const rights = await loadRights(s.source_domain);
-  const stats = await loadCrowdStats(s, rights);
+  const [stats, { data: unlock }, { data: self }, { data: bal }] = await Promise.all([
+    loadCrowdStats(s, rights),
+    admin.from("url_unlocks").select("id").eq("user_id", user.id).eq("business_id", s.business_id).maybeSingle(),
+    admin.from("source_submissions").select("id").eq("user_id", user.id).eq("business_id", s.business_id).in("status", ["approved", "pending_review", "duplicate"]).limit(1).maybeSingle(),
+    admin.rpc("point_balance", { p_user: user.id }),
+  ]);
   const score = Number(f.current_score);
+  const cap = Math.max(Number(f.max_gain), Number(f.max_loss));
+  const range = assumedRange(Number(f.value), f.confidence);
+  const multiple = impliedMultiple(Number(f.value), s.earnings, s.earnings_type);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -54,12 +65,17 @@ export default async function DonePage({ params }: PageProps<"/value/[snapshotId
             <dd className="figures text-2xl font-semibold">
               <Money value={Number(f.value)} />
             </dd>
-            <dd className="text-sm text-muted">{CONFIDENCE_LABEL[f.confidence]} confidence</dd>
+            <dd className="text-sm text-muted">
+              {CONFIDENCE_LABEL[f.confidence]} confidence{multiple ? ` · ${multiple.replace("= ", "")}` : ""}
+            </dd>
+            <dd className="figures text-xs text-muted">
+              Assumed range {fmtMoney(range.low, { compact: true })} to {fmtMoney(range.high, { compact: true })}
+            </dd>
           </div>
           <div>
-            <dt className="text-xs text-muted">Possible</dt>
-            <dd className="mt-1">
-              <PointsRange maxLoss={Number(f.max_loss)} maxGain={Number(f.max_gain)} />
+            <dt className="text-xs text-muted">Possible score</dt>
+            <dd className="mt-1 text-lg">
+              <ScoreRange cap={cap} />
             </dd>
             <dd className="text-xs text-muted">Frozen when you submitted</dd>
           </div>
@@ -86,9 +102,25 @@ export default async function DonePage({ params }: PageProps<"/value/[snapshotId
           <h2 className="text-lg font-semibold">Where the crowd stands now</h2>
           <EvidenceBadge nCount={stats.nCount} evidence={stats.evidence} />
         </div>
-        <p className="mt-1 text-sm text-muted">Now that your valuation is sealed, you can see the pooled view for this listing. It includes your own opinion.</p>
+        <p className="mt-1 text-sm text-muted">
+          Now that your valuation is sealed, you can see the pooled view for this listing. Based on {stats.nCount} independent {stats.nCount === 1 ? "valuation" : "valuations"},
+          including yours.
+        </p>
         <div className="mt-4">
           <CrowdStats stats={stats} />
+        </div>
+        <div className="mt-5 border-t border-border pt-4">
+          <h3 className="text-sm font-semibold">Source listing</h3>
+          <RevealUrl
+            businessId={s.business_id}
+            nInd={stats.nCount}
+            mayLink={Boolean(rights?.may_link_original_listing) && !rights?.revoked_at}
+            alreadyUnlocked={Boolean(unlock)}
+            selfSubmitted={Boolean(self)}
+            balance={Number(bal ?? 0)}
+            publisher={rights?.publisher ?? null}
+            attributionRequired={Boolean(rights?.attribution_required)}
+          />
         </div>
       </Card>
 
