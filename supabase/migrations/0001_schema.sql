@@ -1,4 +1,4 @@
--- PriceAFirm MVP schema
+-- PriceAFirm MVP schema (design v2.2, consolidated)
 -- Conventions: one immutable listing snapshot per valuation question; one scored forecast per
 -- person x business x snapshot; one signed point balance derived from an immutable ledger.
 
@@ -8,12 +8,11 @@ create extension if not exists pgcrypto;
 -- Enums
 -- ---------------------------------------------------------------------------
 create type confidence_level as enum ('low', 'medium', 'high');
-create type ask_basis as enum ('ev', 'equity', 'assets', 'unknown');
 create type earnings_type as enum ('sde', 'ebitda', 'seller_cash_flow', 'unknown');
 create type snapshot_status as enum ('draft', 'pending_review', 'approved', 'withdrawn');
 create type domain_status as enum ('allowed', 'blocked', 'review');
-create type ledger_kind as enum ('WELCOME_GRANT', 'URL_REVEAL', 'SCORE_CHANGE', 'REFUND', 'ADMIN_ADJUSTMENT');
-create type exposure_surface as enum ('preview', 'ranked_list', 'reveal', 'post_submission');
+create type ledger_kind as enum ('WELCOME_GRANT', 'URL_REVEAL', 'URL_REVEAL_FREE', 'SCORE_CHANGE', 'REFUND', 'ADMIN_ADJUSTMENT');
+create type exposure_surface as enum ('preview', 'ranked_list', 'reveal', 'post_submission', 'find_deals_row');
 create type submission_status as enum ('rejected', 'pending_review', 'approved', 'duplicate');
 
 -- ---------------------------------------------------------------------------
@@ -37,6 +36,7 @@ create table profiles (
   accepted_terms_version text,
   accepted_terms_at timestamptz,
   buyer_profile jsonb not null default '{}'::jsonb,
+  first5_floor_clipped numeric not null default 0, -- newcomer floor bookkeeping
   created_at timestamptz not null default now()
 );
 
@@ -45,19 +45,15 @@ create table profiles (
 -- ---------------------------------------------------------------------------
 create table source_domains (
   domain text primary key,            -- registrable host, lowercase, no www
-  status domain_status not null default 'review',
+  status domain_status not null default 'allowed',   -- 'blocked' = excluded list
+  source_type text not null default 'third_party' check (source_type in ('operator','third_party','excluded')),
   publisher text,
-  policy_note text,
-  may_fetch boolean not null default false,
-  may_store boolean not null default false,
-  may_display_ask boolean not null default false,
-  may_display_ev_to_ask boolean not null default false,
-  may_show_anonymous_preview boolean not null default false,
-  may_link_original_listing boolean not null default false,
-  may_log_referral boolean not null default false,
-  attribution_required boolean not null default false,
-  revoked_at timestamptz,
-  effective_date date,
+  attribution_text text,
+  first_seen timestamptz not null default now(),
+  complaint_received_at timestamptz,
+  removed_at timestamptz,
+  removal_reason text,
+  notes text,
   created_at timestamptz not null default now()
 );
 
@@ -84,7 +80,6 @@ create table listing_snapshots (
   metro text,
   asking_price numeric,
   ask_currency text not null default 'USD',
-  ask_basis ask_basis not null default 'unknown',
   revenue numeric,
   revenue_period text,
   earnings numeric,
@@ -92,10 +87,9 @@ create table listing_snapshots (
   includes_inventory boolean,
   includes_nwc boolean,
   includes_real_estate boolean,
-  includes_cash boolean,
-  includes_debt boolean,
   deal_terms_note text,
   snapshot_date date not null default current_date,
+  independent_count int not null default 0, -- n_ind, maintained in submit_forecast / void_forecast
   content_hash text,
   status snapshot_status not null default 'pending_review',
   submitted_by uuid references profiles(id),
@@ -147,15 +141,18 @@ create table forecast_submissions (
   org_key text,
   -- frozen score contract
   m_before double precision not null,  -- n_eff immediately before this forecast
-  max_gain numeric not null,
-  max_loss numeric not null,           -- stored as non-negative magnitude
+  cap numeric not null,                -- possible score is [-cap, +cap] for every confidence
   kernel_version text not null,
   scoring_version text not null,
-  f_before jsonb not null,             -- serialized mixture before this forecast
-  f_after jsonb not null,              -- serialized mixture including this forecast
+  f_before jsonb not null,             -- serialized crowd mixture before this forecast
+  information_level text not null default 'listing' check (information_level in ('listing','cim')),
+  counts_toward_independent boolean not null default true,
+  voided_at timestamptz,
+  void_reason text,
   eligible boolean not null default true,
   eligibility_reason text,
-  current_score numeric not null default 0,
+  raw_score numeric not null default 0,      -- before newcomer floor
+  current_score numeric not null default 0,  -- posted (floored); equals sum of SCORE_CHANGE deltas
   rationale text,                      -- private, optional
   created_at timestamptz not null default now(),
   unique (user_id, business_id, snapshot_id)
@@ -172,6 +169,7 @@ create table score_evaluations (
   previous_score numeric not null,
   new_score numeric not null,
   delta numeric not null,
+  raw_score numeric,
   scoring_version text not null,
   created_at timestamptz not null default now()
 );
@@ -199,6 +197,7 @@ create table url_unlocks (
   business_id uuid not null references businesses(id),
   snapshot_id uuid not null references listing_snapshots(id),
   charged boolean not null default true,
+  count_at_unlock int not null default 0,
   created_at timestamptz not null default now(),
   unique (user_id, business_id)
 );
@@ -255,6 +254,18 @@ create table admin_audit (
   created_at timestamptz not null default now()
 );
 
+-- Operator-listing invites (buyer x listing after NDA)
+create table listing_invites (
+  token text primary key,
+  snapshot_id uuid not null references listing_snapshots(id) on delete cascade,
+  buyer_email text not null,
+  information_level text not null default 'cim' check (information_level in ('listing','cim')),
+  issued_at timestamptz not null default now(),
+  opened_at timestamptz,
+  submitted_at timestamptz,
+  created_by uuid references profiles(id)
+);
+
 -- ---------------------------------------------------------------------------
 -- Balance helper
 -- ---------------------------------------------------------------------------
@@ -292,161 +303,11 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
 
--- ---------------------------------------------------------------------------
--- Exposure: has this person seen PriceAFirm-derived value information for this business?
--- ---------------------------------------------------------------------------
-create or replace function is_exposed(p_user uuid, p_business uuid)
-returns boolean language sql stable as $$
-  select exists (
-    select 1 from exposure_events
-    where user_id = p_user and business_id = p_business
-      and surface in ('preview', 'ranked_list', 'reveal')
-  );
-$$;
-
 create or replace function record_exposure(p_user uuid, p_business uuid, p_snapshot uuid, p_surface exposure_surface)
 returns void language sql as $$
   insert into exposure_events (user_id, business_id, snapshot_id, surface)
   values (p_user, p_business, p_snapshot, p_surface);
 $$;
-
--- ---------------------------------------------------------------------------
--- Reveal original URL: atomic 1-point charge, once per (user, business); free re-opens;
--- free if the user submitted the URL themselves; refund path if no permitted URL exists.
--- ---------------------------------------------------------------------------
-create or replace function reveal_url(p_user uuid, p_business uuid)
-returns table (url text, charged boolean, balance numeric, status text)
-language plpgsql security definer set search_path = public as $$
-declare
-  v_snapshot listing_snapshots%rowtype;
-  v_url text;
-  v_balance numeric;
-  v_self_submitted boolean;
-  v_rights source_domains%rowtype;
-begin
-  -- serialize per user to prevent double-spend on concurrent clicks
-  perform pg_advisory_xact_lock(hashtext(p_user::text));
-
-  select * into v_snapshot from listing_snapshots
-   where business_id = p_business and status = 'approved'
-   order by version desc limit 1;
-  if not found then
-    return query select null::text, false, point_balance(p_user), 'not_found'; return;
-  end if;
-
-  select * into v_rights from source_domains where domain = v_snapshot.source_domain;
-  if not found or not v_rights.may_link_original_listing or v_rights.revoked_at is not null then
-    return query select null::text, false, point_balance(p_user), 'no_rights'; return;
-  end if;
-
-  select source_url into v_url from listing_sources where snapshot_id = v_snapshot.id;
-  if v_url is null then
-    return query select null::text, false, point_balance(p_user), 'no_url'; return;
-  end if;
-
-  -- already unlocked: free re-open
-  if exists (select 1 from url_unlocks where user_id = p_user and business_id = p_business) then
-    return query select v_url, false, point_balance(p_user), 'already_unlocked'; return;
-  end if;
-
-  v_self_submitted := exists (
-    select 1 from source_submissions
-    where user_id = p_user and business_id = p_business and status in ('approved','pending_review','duplicate')
-  );
-
-  if v_self_submitted then
-    insert into url_unlocks (user_id, business_id, snapshot_id, charged) values (p_user, p_business, v_snapshot.id, false);
-    return query select v_url, false, point_balance(p_user), 'self_submitted'; return;
-  end if;
-
-  v_balance := point_balance(p_user);
-  if v_balance < 1 then
-    return query select null::text, false, v_balance, 'insufficient'; return;
-  end if;
-
-  insert into url_unlocks (user_id, business_id, snapshot_id, charged) values (p_user, p_business, v_snapshot.id, true);
-  insert into point_ledger (user_id, kind, amount, business_id, event_key, note)
-  values (p_user, 'URL_REVEAL', -1, p_business, 'URL_REVEAL:' || p_user::text || ':' || p_business::text, 'Revealed source listing URL');
-  insert into exposure_events (user_id, business_id, snapshot_id, surface) values (p_user, p_business, v_snapshot.id, 'reveal');
-
-  return query select v_url, true, point_balance(p_user), 'charged';
-end $$;
-
--- ---------------------------------------------------------------------------
--- Seal a blind forecast. The application computes the kernel, bounds and model snapshots; this
--- function enforces the invariants (blindness, uniqueness, approval, frozen m/bounds) atomically.
--- ---------------------------------------------------------------------------
-create or replace function submit_forecast(
-  p_user uuid, p_snapshot uuid, p_value numeric, p_confidence confidence_level,
-  p_sigma double precision, p_weight double precision,
-  p_m_before double precision, p_max_gain numeric, p_max_loss numeric,
-  p_kernel_version text, p_scoring_version text,
-  p_f_before jsonb, p_f_after jsonb, p_rationale text
-) returns table (forecast_id uuid, status text)
-language plpgsql security definer set search_path = public as $$
-declare
-  v_snap listing_snapshots%rowtype;
-  v_org text;
-  v_id uuid;
-begin
-  select * into v_snap from listing_snapshots where id = p_snapshot;
-  if not found or v_snap.status <> 'approved' then
-    return query select null::uuid, 'snapshot_not_approved'; return;
-  end if;
-  if is_exposed(p_user, v_snap.business_id) then
-    return query select null::uuid, 'exposed'; return;
-  end if;
-  if exists (select 1 from forecast_submissions where user_id = p_user and business_id = v_snap.business_id) then
-    return query select null::uuid, 'already_submitted'; return;
-  end if;
-  select org_key into v_org from profiles where id = p_user;
-
-  insert into forecast_submissions (
-    user_id, business_id, snapshot_id, value, log_value, confidence, sigma, weight, org_key,
-    m_before, max_gain, max_loss, kernel_version, scoring_version, f_before, f_after, rationale
-  ) values (
-    p_user, v_snap.business_id, p_snapshot, p_value, ln(p_value), p_confidence, p_sigma, p_weight, v_org,
-    p_m_before, p_max_gain, p_max_loss, p_kernel_version, p_scoring_version, p_f_before, p_f_after, p_rationale
-  ) returning id into v_id;
-
-  insert into exposure_events (user_id, business_id, snapshot_id, surface)
-  values (p_user, v_snap.business_id, p_snapshot, 'post_submission');
-
-  return query select v_id, 'sealed';
-end $$;
-
--- ---------------------------------------------------------------------------
--- Post a score revaluation delta exactly once per (forecast, trigger).
--- ---------------------------------------------------------------------------
-create or replace function post_score_change(
-  p_forecast uuid, p_trigger uuid, p_later_count int, p_z double precision,
-  p_new_score numeric, p_scoring_version text, p_live boolean
-) returns numeric
-language plpgsql security definer set search_path = public as $$
-declare
-  v_f forecast_submissions%rowtype;
-  v_delta numeric;
-begin
-  select * into v_f from forecast_submissions where id = p_forecast for update;
-  if not found then return 0; end if;
-  v_delta := round(p_new_score - v_f.current_score, 4);
-
-  insert into score_evaluations (forecast_id, triggered_by, later_count, z, previous_score, new_score, delta, scoring_version)
-  values (p_forecast, p_trigger, p_later_count, p_z, v_f.current_score, p_new_score, v_delta, p_scoring_version);
-
-  if p_live and v_delta <> 0 then
-    begin
-      insert into point_ledger (user_id, kind, amount, forecast_id, business_id, event_key, note)
-      values (v_f.user_id, 'SCORE_CHANGE', v_delta, p_forecast, v_f.business_id,
-              'SCORE_CHANGE:' || p_forecast::text || ':' || coalesce(p_trigger::text, 'recompute'),
-              'Later independent valuation revalued this forecast');
-    exception when unique_violation then
-      return 0; -- already posted for this trigger; never mint twice
-    end;
-    update forecast_submissions set current_score = p_new_score where id = p_forecast;
-  end if;
-  return v_delta;
-end $$;
 
 -- ---------------------------------------------------------------------------
 -- Row level security: members read only their own rows; all writes go through
@@ -473,6 +334,7 @@ create policy "profiles: self read" on profiles for select using (auth.uid() = i
 create policy "profiles: self update" on profiles for update using (auth.uid() = id);
 create policy "snapshots: approved readable" on listing_snapshots for select using (status = 'approved');
 create policy "domains: readable" on source_domains for select using (true);
+alter table listing_invites enable row level security;
 create policy "forecasts: self read" on forecast_submissions for select using (auth.uid() = user_id);
 create policy "evaluations: self read" on score_evaluations for select
   using (exists (select 1 from forecast_submissions f where f.id = forecast_id and f.user_id = auth.uid()));
@@ -483,7 +345,201 @@ create policy "submissions: self read" on source_submissions for select using (a
 create policy "skill: self read" on skill_statistics for select using (auth.uid() = user_id);
 -- listing_sources, aggregation_cache, invites, query_events, admin_audit: no member policies (service role only).
 
-revoke execute on function reveal_url(uuid, uuid) from public, anon, authenticated;
-revoke execute on function submit_forecast(uuid, uuid, numeric, confidence_level, double precision, double precision, double precision, numeric, numeric, text, text, jsonb, jsonb, text) from public, anon, authenticated;
-revoke execute on function post_score_change(uuid, uuid, int, double precision, numeric, text, boolean) from public, anon, authenticated;
 revoke execute on function record_exposure(uuid, uuid, uuid, exposure_surface) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- v2.2 functions
+-- ---------------------------------------------------------------------------
+create or replace function source_is_live(p_domain text)
+returns boolean language sql stable as $$
+  select exists (select 1 from source_domains where domain = p_domain and status <> 'blocked' and removed_at is null);
+$$;
+
+-- ---------------------------------------------------------------------------
+-- is_exposed: Find Deals rows count; previews (legacy) and reveals too
+-- ---------------------------------------------------------------------------
+create or replace function is_exposed(p_user uuid, p_business uuid)
+returns boolean language sql stable as $$
+  select exists (
+    select 1 from exposure_events
+    where user_id = p_user and business_id = p_business
+      and surface in ('preview', 'ranked_list', 'reveal', 'find_deals_row')
+  );
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Reveal: free below 3 independent valuations, 1 point at 3+, free for the submitter, once per business
+-- ---------------------------------------------------------------------------
+drop function if exists reveal_url(uuid, uuid);
+create or replace function reveal_url(p_user uuid, p_business uuid)
+returns table (url text, charged boolean, balance numeric, status text, count int)
+language plpgsql security definer set search_path = public as $$
+#variable_conflict use_column
+declare
+  v_snapshot listing_snapshots%rowtype;
+  v_url text;
+  v_balance numeric;
+  v_self boolean;
+  v_count int;
+  v_free_today int;
+begin
+  perform pg_advisory_xact_lock(hashtext(p_user::text));
+
+  select * into v_snapshot from listing_snapshots
+   where business_id = p_business and status = 'approved' order by version desc limit 1;
+  if not found then return query select null::text, false, point_balance(p_user), 'not_found', 0; return; end if;
+  if not source_is_live(v_snapshot.source_domain) then
+    return query select null::text, false, point_balance(p_user), 'removed', v_snapshot.independent_count; return;
+  end if;
+  select source_url into v_url from listing_sources where snapshot_id = v_snapshot.id;
+  if v_url is null then return query select null::text, false, point_balance(p_user), 'no_url', v_snapshot.independent_count; return; end if;
+
+  v_count := v_snapshot.independent_count;
+
+  if exists (select 1 from url_unlocks where user_id = p_user and business_id = p_business) then
+    return query select v_url, false, point_balance(p_user), 'already_unlocked', v_count; return;
+  end if;
+
+  v_self := exists (select 1 from source_submissions where user_id = p_user and business_id = p_business
+                     and status in ('approved','pending_review','duplicate'));
+  if v_self or v_count < 3 then
+    if not v_self then
+      select count(*) into v_free_today from url_unlocks
+       where user_id = p_user and charged = false and created_at > now() - interval '1 day';
+      if v_free_today >= 20 then
+        return query select null::text, false, point_balance(p_user), 'rate_limited', v_count; return;
+      end if;
+    end if;
+    insert into url_unlocks (user_id, business_id, snapshot_id, charged, count_at_unlock) values (p_user, p_business, v_snapshot.id, false, v_count);
+    insert into point_ledger (user_id, kind, amount, business_id, event_key, note)
+    values (p_user, 'URL_REVEAL_FREE', 0, p_business, 'URL_REVEAL:' || p_user::text || ':' || p_business::text,
+            case when v_self then 'Revealed URL you submitted (free)' else 'Revealed source URL (free, fewer than 3 valuations)' end);
+    insert into exposure_events (user_id, business_id, snapshot_id, surface) values (p_user, p_business, v_snapshot.id, 'reveal');
+    return query select v_url, false, point_balance(p_user), case when v_self then 'self_submitted' else 'free' end, v_count; return;
+  end if;
+
+  v_balance := point_balance(p_user);
+  if v_balance < 1 then return query select null::text, false, v_balance, 'insufficient', v_count; return; end if;
+
+  insert into url_unlocks (user_id, business_id, snapshot_id, charged, count_at_unlock) values (p_user, p_business, v_snapshot.id, true, v_count);
+  insert into point_ledger (user_id, kind, amount, business_id, event_key, note)
+  values (p_user, 'URL_REVEAL', -1, p_business, 'URL_REVEAL:' || p_user::text || ':' || p_business::text, 'Revealed source URL (' || v_count || ' valuations)');
+  insert into exposure_events (user_id, business_id, snapshot_id, surface) values (p_user, p_business, v_snapshot.id, 'reveal');
+  return query select v_url, true, point_balance(p_user), 'charged', v_count;
+end $$;
+revoke execute on function reveal_url(uuid, uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Seal a forecast: cap only; increments independent_count in the same transaction when the
+-- submitter's org cluster has not already contributed.
+-- ---------------------------------------------------------------------------
+drop function if exists submit_forecast(uuid, uuid, numeric, confidence_level, double precision, double precision, double precision, numeric, numeric, text, text, jsonb, jsonb, text);
+create or replace function submit_forecast(
+  p_user uuid, p_snapshot uuid, p_value numeric, p_confidence confidence_level,
+  p_sigma double precision, p_weight double precision,
+  p_m_before double precision, p_cap numeric,
+  p_kernel_version text, p_scoring_version text,
+  p_f_before jsonb, p_rationale text, p_information_level text
+) returns table (forecast_id uuid, status text, independent_count int)
+language plpgsql security definer set search_path = public as $$
+#variable_conflict use_column
+declare
+  v_snap listing_snapshots%rowtype;
+  v_org text;
+  v_id uuid;
+  v_counts boolean;
+  v_daily int;
+begin
+  select * into v_snap from listing_snapshots where id = p_snapshot for update;
+  if not found or v_snap.status <> 'approved' then return query select null::uuid, 'snapshot_not_approved', 0; return; end if;
+  if not source_is_live(v_snap.source_domain) then return query select null::uuid, 'removed', v_snap.independent_count; return; end if;
+  if is_exposed(p_user, v_snap.business_id) then return query select null::uuid, 'exposed', v_snap.independent_count; return; end if;
+  if exists (select 1 from forecast_submissions where user_id = p_user and business_id = v_snap.business_id) then
+    return query select null::uuid, 'already_submitted', v_snap.independent_count; return;
+  end if;
+  select count(*) into v_daily from forecast_submissions where user_id = p_user and created_at > now() - interval '1 day';
+  if v_daily >= 20 then return query select null::uuid, 'rate_limited', v_snap.independent_count; return; end if;
+
+  select org_key into v_org from profiles where id = p_user;
+  v_counts := v_org is null or not exists (
+    select 1 from forecast_submissions
+    where snapshot_id = p_snapshot and org_key = v_org and counts_toward_independent and voided_at is null
+  );
+
+  insert into forecast_submissions (
+    user_id, business_id, snapshot_id, value, log_value, confidence, sigma, weight, org_key,
+    m_before, cap, kernel_version, scoring_version, f_before, rationale, information_level, counts_toward_independent
+  ) values (
+    p_user, v_snap.business_id, p_snapshot, p_value, ln(p_value), p_confidence, p_sigma, p_weight, v_org,
+    p_m_before, p_cap, p_kernel_version, p_scoring_version, p_f_before, p_rationale, coalesce(p_information_level, 'listing'), v_counts
+  ) returning id into v_id;
+
+  if v_counts then
+    update listing_snapshots set independent_count = independent_count + 1 where id = p_snapshot returning listing_snapshots.independent_count into v_snap.independent_count;
+  end if;
+
+  insert into exposure_events (user_id, business_id, snapshot_id, surface) values (p_user, v_snap.business_id, p_snapshot, 'post_submission');
+  return query select v_id, 'sealed', v_snap.independent_count;
+end $$;
+revoke execute on function submit_forecast(uuid, uuid, numeric, confidence_level, double precision, double precision, double precision, numeric, text, text, jsonb, text, text) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Post a (floored) score exactly once per (forecast, trigger)
+-- ---------------------------------------------------------------------------
+drop function if exists post_score_change(uuid, uuid, int, double precision, numeric, text, boolean);
+create or replace function post_score_change(
+  p_forecast uuid, p_trigger uuid, p_later_count int, p_z double precision,
+  p_raw_score numeric, p_posted_score numeric, p_scoring_version text, p_live boolean
+) returns numeric
+language plpgsql security definer set search_path = public as $$
+declare
+  v_f forecast_submissions%rowtype;
+  v_delta numeric;
+begin
+  select * into v_f from forecast_submissions where id = p_forecast for update;
+  if not found then return 0; end if;
+  v_delta := round(p_posted_score - v_f.current_score, 4);
+  insert into score_evaluations (forecast_id, triggered_by, later_count, z, previous_score, new_score, delta, scoring_version, raw_score)
+  values (p_forecast, p_trigger, p_later_count, p_z, v_f.current_score, p_posted_score, v_delta, p_scoring_version, p_raw_score);
+  update forecast_submissions set raw_score = p_raw_score where id = p_forecast;
+  if p_live and v_delta <> 0 then
+    begin
+      insert into point_ledger (user_id, kind, amount, forecast_id, business_id, event_key, note)
+      values (v_f.user_id, 'SCORE_CHANGE', v_delta, p_forecast, v_f.business_id,
+              'SCORE_CHANGE:' || p_forecast::text || ':' || coalesce(p_trigger::text, 'recompute'),
+              'Later independent valuation revalued this forecast');
+    exception when unique_violation then
+      return 0;
+    end;
+    update forecast_submissions set current_score = p_posted_score where id = p_forecast;
+  end if;
+  return v_delta;
+end $$;
+revoke execute on function post_score_change(uuid, uuid, int, double precision, numeric, numeric, text, boolean) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Admin void: removes a forecast from scoring and decrements the count through a recorded event
+-- ---------------------------------------------------------------------------
+create or replace function void_forecast(p_forecast uuid, p_reason text, p_actor uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_f forecast_submissions%rowtype;
+begin
+  select * into v_f from forecast_submissions where id = p_forecast for update;
+  if not found or v_f.voided_at is not null then return; end if;
+  update forecast_submissions set voided_at = now(), void_reason = p_reason, eligible = false where id = p_forecast;
+  if v_f.counts_toward_independent then
+    update forecast_submissions set counts_toward_independent = false where id = p_forecast;
+    update listing_snapshots set independent_count = greatest(0, independent_count - 1) where id = v_f.snapshot_id;
+  end if;
+  insert into admin_audit (actor, action, target, payload) values (p_actor, 'void_forecast', p_forecast::text, jsonb_build_object('reason', p_reason));
+end $$;
+revoke execute on function void_forecast(uuid, text, uuid) from public, anon, authenticated;
+
+-- Remove a source on complaint
+create or replace function remove_source(p_domain text, p_reason text, p_actor uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update source_domains set removed_at = now(), removal_reason = p_reason, complaint_received_at = coalesce(complaint_received_at, now()) where domain = p_domain;
+  insert into admin_audit (actor, action, target, payload) values (p_actor, 'remove_source', p_domain, jsonb_build_object('reason', p_reason));
+end $$;
+revoke execute on function remove_source(text, text, uuid) from public, anon, authenticated;

@@ -10,7 +10,8 @@ Supabase (Postgres + Auth magic links), Node 24.
 ## Layout
 
 ```
-supabase/migrations/0001_schema.sql   tables, RPCs (reveal_url, submit_forecast, post_score_change), RLS
+supabase/migrations/0001_schema.sql   consolidated v2.2 schema, RPCs, RLS
+supabase/tests/                       Postgres smoke test for the money paths (also run in CI)
 supabase/seed.sql                      source-domain policy (BizBuySell blocked) + fictional dev listings
 src/lib/quant/model.ts                 pure engine: kernels, opinion pool, frozen bounds, peer-predictive score
 src/lib/quant/service.ts               I/O: valuation question, seal forecast, recompute, aggregates, skill
@@ -41,7 +42,7 @@ npm run lint && npm run build
 ## Supabase
 
 1. Create a project named `priceafirm` (region near Vercel's us-east is fine).
-2. Run `supabase/migrations/0001_schema.sql` in the SQL editor (or `supabase db push` with the CLI).
+2. Run `supabase/migrations/0001_schema.sql` (single consolidated schema) in the SQL editor, or `supabase link` then `supabase db push`.
 3. Run `supabase/seed.sql` for dev data. Delete the fictional listings before the pilot.
 4. Auth: enable Email provider with magic links; set Site URL to the Vercel domain and add
    `https://<domain>/auth/callback` to Redirect URLs. Disable "Confirm email" double opt-in if you want
@@ -66,7 +67,7 @@ Create the project from the Git repo (framework Next.js, Node 24). Environment v
 | SESSION_SECRET | `openssl rand -base64 48` |
 | CRON_SECRET | `openssl rand -base64 48` (vercel.json cron sends it as a bearer token) |
 | INVITE_ONLY | `1` for the pilot |
-| SCORING_MODE | `shadow` until the simulation gate is passed, then `live` |
+| SCORING_MODE | `shadow` until pilot shadow scores are reviewed, then `live` |
 | ANTHROPIC_API_KEY | optional; enables LLM parsing of search intent |
 
 `vercel.json` schedules `/api/cron/recompute` daily; it re-runs scoring idempotently and refreshes skill
