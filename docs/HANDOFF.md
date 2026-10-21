@@ -40,21 +40,16 @@ was written against v2.0 + one amendment and is now partly stale; where they dis
   MCP tools enabled), and a Git repo (NBATaskRed/priceafirm does not exist; the session GitHub token
   cannot create repos).
 
-## Remaining for v2.2 (UI layer, mostly in src/app, src/components, src/lib/actions)
-The UI builder agent was launched against v2.0 and then messaged with the v2.2 list below. Verify each:
-1. Find Deals: identifiable rows, exposure (`find_deals_row`) written for every returned row BEFORE
-   returning, 10 per page, once-per-session gate, min-valuations filter, 0-count rows ranked by fit only.
-   Remove opaque slots / preview route / discovery tokens.
-2. Reveal button copy and free/paid logic from `revealCost(independent_count)`; reveal available on the
-   post-submission page with the crowd figure and "Based on N independent valuations".
-3. Valuation form: single possible score ±cap, assumed range per confidence (`assumedRange`), live
-   implied multiple (`impliedMultiple`), "Independent valuations on file: N"; Value queue "Valuations"
-   column and sort by fewest valuations; no ask-basis anywhere.
-4. Add a Listing: no rights review; any public broker URL except excluded ones.
-5. Admin: sources tab = source_type + complaint/removal ("Remove on complaint" -> `remove_source`),
-   "Void forecast" -> `void_forecast`, invites tab also issues operator listing invites
-   (`listing_invites`, signed token link `/invite/[token]` that opens the valuation form with
-   information_level = cim; route still to be built).
-6. Signup/terms/points copy: newcomer floor (−3 over first 5 scored forecasts), `first5_floor_clipped`.
-7. `npm run build`, `npm run lint`, `npx vitest run` green; then commit, push, link Vercel to the repo,
-   add Supabase env vars, run migrations + seed, switch SCORING_MODE to live after the simulation gate.
+## App layer (built to v2.2, committed 9ce72af)
+All screens, server actions and admin tools listed in the design are implemented; `npm run build`,
+`npm run lint`, `npx tsc --noEmit` and `npx vitest run` (73 tests) are green. Not yet exercised against a
+live Supabase project.
+
+## Remaining
+1. Create GitHub repo NBATaskRed/priceafirm (user), push, link Vercel project `priceafirm` to it.
+2. Create Supabase project, run a consolidated migration (0001 + 0002) and seed, enable email magic links,
+   set the three Supabase env vars in Vercel, deploy, smoke-test the acceptance list in design Section 18.
+3. Build `/invite/[token]` (operator listing invite link opening the valuation form with
+   information_level = cim) and the hook from the NBA buyer-qualification flow that issues invites.
+4. Replace the placeholder multiple table in `src/lib/quant/model.ts` with the operator's deal-history table.
+5. Flip SCORING_MODE from shadow to live after reviewing shadow scores from the pilot.
