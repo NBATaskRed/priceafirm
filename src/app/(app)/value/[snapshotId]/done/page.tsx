@@ -2,12 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireMember } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { loadCrowdStats, loadRights } from "@/lib/discovery/listings";
+import { loadCrowdStats, loadSource } from "@/lib/discovery/listings";
 import { fmtMoney, type ForecastRow, type ListingSnapshot } from "@/lib/domain/types";
 import { CrowdStats } from "@/components/CrowdStats";
 import { BALANCE_SENTENCE, ButtonLink, CONFIDENCE_LABEL, Card, EvidenceBadge, Money, Points, ScoreRange, fmtDate, locationText } from "@/components/ui";
 import { RevealUrl } from "@/components/RevealUrl";
-import { assumedRange } from "@/lib/domain/assumed";
+import { assumedRange } from "@/lib/quant/model";
 import { impliedMultiple } from "@/components/ValuationForm";
 
 export const metadata = { title: "Valuation sealed" };
@@ -28,15 +28,15 @@ export default async function DonePage({ params }: PageProps<"/value/[snapshotId
   const f = (fc as (ForecastRow & { rationale: string | null }) | null) ?? null;
   if (!f) redirect(`/value/${snapshotId}`);
 
-  const rights = await loadRights(s.source_domain);
+  const source = await loadSource(s.source_domain);
   const [stats, { data: unlock }, { data: self }, { data: bal }] = await Promise.all([
-    loadCrowdStats(s, rights),
+    loadCrowdStats(s),
     admin.from("url_unlocks").select("id").eq("user_id", user.id).eq("business_id", s.business_id).maybeSingle(),
     admin.from("source_submissions").select("id").eq("user_id", user.id).eq("business_id", s.business_id).in("status", ["approved", "pending_review", "duplicate"]).limit(1).maybeSingle(),
     admin.rpc("point_balance", { p_user: user.id }),
   ]);
   const score = Number(f.current_score);
-  const cap = Math.max(Number(f.max_gain), Number(f.max_loss));
+  const cap = Number(f.cap);
   const range = assumedRange(Number(f.value), f.confidence);
   const multiple = impliedMultiple(Number(f.value), s.earnings, s.earnings_type);
 
@@ -69,7 +69,7 @@ export default async function DonePage({ params }: PageProps<"/value/[snapshotId
               {CONFIDENCE_LABEL[f.confidence]} confidence{multiple ? ` · ${multiple.replace("= ", "")}` : ""}
             </dd>
             <dd className="figures text-xs text-muted">
-              Assumed range {fmtMoney(range.low, { compact: true })} to {fmtMoney(range.high, { compact: true })}
+              Assumed range {fmtMoney(range.lo, { compact: true })} to {fmtMoney(range.hi, { compact: true })}
             </dd>
           </div>
           <div>
@@ -114,12 +114,11 @@ export default async function DonePage({ params }: PageProps<"/value/[snapshotId
           <RevealUrl
             businessId={s.business_id}
             nInd={stats.nCount}
-            mayLink={Boolean(rights?.may_link_original_listing) && !rights?.revoked_at}
             alreadyUnlocked={Boolean(unlock)}
             selfSubmitted={Boolean(self)}
             balance={Number(bal ?? 0)}
-            publisher={rights?.publisher ?? null}
-            attributionRequired={Boolean(rights?.attribution_required)}
+            publisher={source?.publisher ?? null}
+            attributionText={source?.attribution_text ?? null}
           />
         </div>
       </Card>

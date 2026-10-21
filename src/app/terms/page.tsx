@@ -25,8 +25,9 @@ export default function TermsPage() {
           <li>you are not uploading documents, and your optional note contains no confidential or NDA-restricted information.</li>
         </ul>
         <p>
-          When you add a listing URL you confirm that it is a public page on a source you are allowed to share, and that the facts you enter are a fair
-          summary of what the page states. We never fetch pages from blocked sources, and we do not store the broker&apos;s wording.
+          When you add a listing URL you confirm that it is a public broker listing page, not on our excluded list, and that the facts you enter are a fair
+          summary of what the page states. We never fetch pages from excluded sources, we do not store the broker&apos;s wording, and we remove a source&apos;s
+          listings when its publisher asks.
         </p>
       </LegalSection>
 
@@ -38,20 +39,24 @@ export default function TermsPage() {
         <p>
           A valuation earns a score that moves as later independent valuations of the same business arrive. The score measures how well your estimate
           anticipated later opinions, which is a peer-predictive signal and not verified accuracy. Scores and the resulting point balance can go up or
-          down, and your balance can become negative. Each valuation has a frozen maximum gain and maximum loss shown before you submit.
+          down, and your balance can become negative. Each valuation has a frozen possible score range, the same for every confidence level, shown before you
+          submit.
         </p>
         <p>
-          Revealing an original listing URL costs exactly 1 point once per business. Re-opening a URL you already revealed is free, and revealing a URL you
-          submitted yourself is free. Already-revealed URLs stay available even if your balance later falls below zero; new reveals need a balance of at
-          least 1.
+          Newcomer floor: across your first 5 scored forecasts, your cumulative posted loss is floored at &minus;3. After that the floor no longer applies.
+        </p>
+        <p>
+          Revealing a source listing URL is free while the listing has fewer than 3 independent valuations and costs exactly 1 point once per business from 3
+          on. Re-opening a URL you already revealed is free, and revealing a URL you submitted yourself is free. Already-revealed URLs stay available even if
+          your balance later falls below zero; new paid reveals need a balance of at least 1.
         </p>
       </LegalSection>
 
-      <LegalSection title="Previews and eligibility">
+      <LegalSection title="Find Deals and eligibility">
         <p>
-          Previewing an opportunity in Find Deals shows you crowd-derived value information for that business. Once you have seen it you can no longer
-          submit a scored blind valuation of that business. Previews cost nothing and this effect is permanent; the preview button says so before you
-          click.
+          Listings in Find Deals include crowd valuations. Any listing you see there can no longer earn you points: once the crowd figure has been shown to
+          you, a blind valuation of that business can no longer be scored. Searching costs nothing and this effect is permanent; a notice says so before
+          your first search in each session. If you want to value a listing first, use Value Businesses.
         </p>
       </LegalSection>
 

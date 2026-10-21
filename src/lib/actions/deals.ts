@@ -7,11 +7,11 @@ import { requireMember } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { interpretSearch } from "@/lib/search";
 import { applyFilters } from "@/lib/search/apply";
-import { loadApprovedListings, loadCrowdStats, loadRightsMap, loadUserBusinessState, type CrowdStatsView } from "@/lib/discovery/listings";
+import { loadApprovedListings, loadCrowdStats, loadSourceMap, loadUserBusinessState, type CrowdStatsView } from "@/lib/discovery/listings";
 import type { ListingSnapshot } from "@/lib/domain/types";
 import { searchRateLimited } from "./guards";
 
-export const DEALS_GATE_COOKIE = "pf_deals_gate";
+import { DEALS_GATE_COOKIE } from "@/lib/discovery/gate";
 const PAGE_SIZE = 10;
 
 /** The once-per-session acknowledgement that Find deals shows crowd valuations and ends eligibility. */
@@ -33,18 +33,16 @@ export interface DealRow {
   revenue: number | null;
   earnings: number | null;
   earningsType: ListingSnapshot["earnings_type"];
-  /** Only when the source permits showing the ask. */
   askingPrice: number | null;
   nInd: number;
   evidence: CrowdStatsView["evidence"];
   medianEv: number | null;
   medianToAsk: number | null;
   prAboveAsk: number | null;
-  mayLink: boolean;
   alreadyUnlocked: boolean;
   selfSubmitted: boolean;
   publisher: string | null;
-  attributionRequired: boolean;
+  attributionText: string | null;
   fit: number;
 }
 
@@ -90,13 +88,9 @@ export async function searchDealsAction(text: string, page = 1, minValuations = 
   const interpreted = await interpretSearch(parsed.data.text);
 
   const [listings, mine] = await Promise.all([loadApprovedListings(), loadUserBusinessState(user.id)]);
-  const rights = await loadRightsMap(listings.map((x) => x.snapshot.source_domain));
+  const sources = await loadSourceMap(listings.map((x) => x.snapshot.source_domain));
   const countBySnapshot = new Map(listings.map((l) => [l.snapshot.id, l.counts.n_count]));
-  const previewable = listings.filter((l) => {
-    const r = rights.get(l.snapshot.source_domain);
-    return r && r.status !== "blocked" && !r.revoked_at && r.may_show_anonymous_preview;
-  });
-  const matched = applyFilters(interpreted.filters, previewable.map((l) => l.snapshot)).filter((s) => (countBySnapshot.get(s.id) ?? 0) >= parsed.data.minValuations);
+  const matched = applyFilters(interpreted.filters, listings.map((l) => l.snapshot)).filter((s) => (countBySnapshot.get(s.id) ?? 0) >= parsed.data.minValuations);
   const matchedIds = matched.map((s) => s.id);
 
   const { data: agg } = matchedIds.length
@@ -141,22 +135,17 @@ export async function searchDealsAction(text: string, page = 1, minValuations = 
   // Exposure first. Each row's exposure must be durable before any crowd figure is returned.
   for (const s of slice) {
     if (mine.exposed.has(s.business_id)) continue;
-    const { error } = await admin.rpc("record_exposure", { p_user: user.id, p_business: s.business_id, p_snapshot: s.id, p_surface: "ranked_list" });
+    const { error } = await admin.rpc("record_exposure", { p_user: user.id, p_business: s.business_id, p_snapshot: s.id, p_surface: "find_deals_row" });
     if (error) {
       console.error("record_exposure failed", error);
       return { status: "invalid", message: "Could not record this view. Try the search again." };
     }
   }
 
-  const { data: self } = slice.length
-    ? await admin.from("source_submissions").select("business_id").eq("user_id", user.id).in("business_id", slice.map((s) => s.business_id)).in("status", ["approved", "pending_review", "duplicate"])
-    : { data: [] };
-  const selfSet = new Set(((self ?? []) as Array<{ business_id: string }>).map((r) => r.business_id));
-
   const rows: DealRow[] = await Promise.all(
     slice.map(async (s) => {
-      const r = rights.get(s.source_domain) ?? null;
-      const stats = await loadCrowdStats(s, r);
+      const src = sources.get(s.source_domain) ?? null;
+      const stats = await loadCrowdStats(s);
       return {
         businessId: s.business_id,
         snapshotId: s.id,
@@ -174,11 +163,10 @@ export async function searchDealsAction(text: string, page = 1, minValuations = 
         medianEv: stats.medianEv,
         medianToAsk: stats.medianToAsk,
         prAboveAsk: stats.prAboveAsk,
-        mayLink: Boolean(r?.may_link_original_listing),
         alreadyUnlocked: mine.unlocked.has(s.business_id),
-        selfSubmitted: selfSet.has(s.business_id),
-        publisher: r?.publisher ?? null,
-        attributionRequired: Boolean(r?.attribution_required),
+        selfSubmitted: mine.selfSubmitted.has(s.business_id),
+        publisher: src?.publisher ?? null,
+        attributionText: src?.attribution_text ?? null,
         fit: fitScore(s, buyer),
       };
     }),
@@ -190,7 +178,7 @@ export async function searchDealsAction(text: string, page = 1, minValuations = 
 
 export type RevealUrlResult =
   | { status: "charged" | "free" | "already_unlocked" | "self_submitted"; url: string; charged: boolean; balance: number }
-  | { status: "insufficient" | "no_rights" | "no_url" | "not_found" | "invalid"; message: string; balance: number };
+  | { status: "insufficient" | "removed" | "no_url" | "not_found" | "rate_limited" | "invalid"; message: string; balance: number };
 
 /** Reveal the source URL: free below 3 independent valuations, 1 point from 3 on; once per business. */
 export async function revealUrlAction(businessId: string): Promise<RevealUrlResult> {
@@ -214,8 +202,10 @@ export async function revealUrlAction(businessId: string): Promise<RevealUrlResu
       return { status: row.status, url: row.url ?? "", charged: Boolean(row.charged), balance: newBalance };
     case "insufficient":
       return { status: "insufficient", message: "Your balance is below 1 point. Value a business to earn more, then come back.", balance: newBalance };
-    case "no_rights":
-      return { status: "no_rights", message: "The source does not permit URL reveals.", balance: newBalance };
+    case "removed":
+      return { status: "removed", message: "This listing was removed at the publisher's request.", balance: newBalance };
+    case "rate_limited":
+      return { status: "rate_limited", message: "You have reached the daily limit of free reveals. Try again tomorrow.", balance: newBalance };
     case "no_url":
       return { status: "no_url", message: "No listing URL is stored for this business.", balance: newBalance };
     default:

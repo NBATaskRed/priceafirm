@@ -1,16 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Manrope, Archivo } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const manrope = Manrope({
+/* Self-hosted variable fonts (SIL OFL): Manrope for UI, Archivo for figures. */
+const manrope = localFont({
+  src: "./fonts/manrope-latin-wght.woff2",
+  weight: "200 800",
   variable: "--font-manrope",
-  subsets: ["latin"],
   display: "swap",
 });
 
-const archivo = Archivo({
+const archivo = localFont({
+  src: "./fonts/archivo-latin-wght.woff2",
+  weight: "100 900",
   variable: "--font-archivo",
-  subsets: ["latin"],
   display: "swap",
 });
 
@@ -30,11 +33,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${manrope.variable} ${archivo.variable} h-full`}
-      style={{ ["--font-ui" as string]: "var(--font-manrope), ui-sans-serif, system-ui, sans-serif", ["--font-figures" as string]: "var(--font-archivo), var(--font-manrope), ui-sans-serif, sans-serif" }}
-    >
+    <html lang="en" className={`${manrope.variable} ${archivo.variable} h-full`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

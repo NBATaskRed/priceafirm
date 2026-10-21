@@ -9,7 +9,7 @@ import { RevealUrl } from "@/components/RevealUrl";
 
 const EXAMPLES = ["HVAC or plumbing in Florida under $4M with SDE over $500K", "B2B services in the Southeast, EBITDA above $1M", "Manufacturing in NC or GA"];
 
-export function DealSearch({ balance, gateConfirmed: initialGate }: { balance: number; gateConfirmed: boolean }) {
+export function DealSearch({ gateConfirmed: initialGate }: { gateConfirmed: boolean }) {
   const [gate, setGate] = useState(initialGate);
   const [text, setText] = useState("");
   const [minValuations, setMinValuations] = useState(0);
@@ -200,7 +200,9 @@ function DealRowCard({ row, balance }: { row: DealRow; balance: number }) {
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
         <div>
           <dt className="text-xs text-muted">Ask</dt>
-          <dd className="figures">{row.askingPrice != null ? <Money value={row.askingPrice} /> : <span className="text-muted">Not shown</span>}</dd>
+          <dd className="figures">
+            <Money value={row.askingPrice} />
+          </dd>
         </div>
         <div>
           <dt className="text-xs text-muted">Revenue</dt>
@@ -241,12 +243,11 @@ function DealRowCard({ row, balance }: { row: DealRow; balance: number }) {
         <RevealUrl
           businessId={row.businessId}
           nInd={row.nInd}
-          mayLink={row.mayLink}
           alreadyUnlocked={row.alreadyUnlocked}
           selfSubmitted={row.selfSubmitted}
           balance={balance}
           publisher={row.publisher}
-          attributionRequired={row.attributionRequired}
+          attributionText={row.attributionText}
           size="sm"
         />
       </div>

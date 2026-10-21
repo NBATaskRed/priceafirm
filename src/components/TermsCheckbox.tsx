@@ -11,7 +11,8 @@ export function TermsCheckbox({ checked, onChange, id = "acceptTerms" }: { check
         <span className="font-medium">Before your first contribution</span>
         <span className="mt-1 block text-text/90">{TERMS_ACK_TEXT}</span>
         <span className="mt-1 block text-xs text-muted">
-          Points are not cash and your balance can go negative. Read the{" "}
+          Points are not cash and your balance can go negative. Across your first 5 scored forecasts, your cumulative posted loss is floored at &minus;3. Read
+          the{" "}
           <Link href="/terms" className="underline" target="_blank">
             terms
           </Link>

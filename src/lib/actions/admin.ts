@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { refreshAggregate } from "@/lib/quant/service";
-import { recomputeEverything } from "./recompute-core";
+import { recomputeSnapshot, refreshAggregate } from "@/lib/quant/service";
 import { isBlockedDomain, registrableDomain } from "@/lib/sources/normalize";
+import { recomputeEverything } from "./recompute-core";
 import { str } from "./guards";
 
 export type AdminResult = { status: "ok"; message: string } | { status: "error"; message: string };
@@ -14,18 +14,6 @@ export type AdminResult = { status: "ok"; message: string } | { status: "error";
 async function audit(actor: string, action: string, target: string | null, payload: Record<string, unknown> | null) {
   await supabaseAdmin().from("admin_audit").insert({ actor, action, target, payload });
 }
-
-const RIGHT_FLAGS = [
-  "may_fetch",
-  "may_store",
-  "may_display_ask",
-  "may_display_ev_to_ask",
-  "may_show_anonymous_preview",
-  "may_link_original_listing",
-  "may_log_referral",
-  "attribution_required",
-] as const;
-type RightFlag = (typeof RIGHT_FLAGS)[number];
 
 const domainSchema = z
   .string()
@@ -35,6 +23,9 @@ const domainSchema = z
   .max(253)
   .regex(/^[a-z0-9.-]+$/);
 
+type SourceType = "operator" | "third_party" | "excluded";
+const SOURCE_TYPES: SourceType[] = ["operator", "third_party", "excluded"];
+
 /* ---------------------------------------------------------------- Sources */
 
 export async function addSourceDomainAction(formData: FormData): Promise<AdminResult> {
@@ -42,43 +33,86 @@ export async function addSourceDomainAction(formData: FormData): Promise<AdminRe
   const raw = domainSchema.safeParse(str(formData, "domain").replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
   if (!raw.success) return { status: "error", message: "Enter a bare domain like example.com." };
   const domain = registrableDomain(raw.data.replace(/^www\./, ""));
-  if (isBlockedDomain(domain)) return { status: "error", message: `${domain} is hard-blocked for the pilot and cannot be added.` };
-  const status = str(formData, "status") === "allowed" ? "allowed" : "review";
+  const typeRaw = str(formData, "source_type");
+  const source_type: SourceType = SOURCE_TYPES.includes(typeRaw as SourceType) ? (typeRaw as SourceType) : "third_party";
+  if (isBlockedDomain(domain) && source_type !== "excluded") return { status: "error", message: `${domain} is hard-excluded in code; it can only be recorded as excluded.` };
   const publisher = str(formData, "publisher") || null;
-  const { error } = await supabaseAdmin().from("source_domains").upsert({ domain, status, publisher, effective_date: new Date().toISOString().slice(0, 10) }, { onConflict: "domain" });
-  if (error) return { status: "error", message: error.message };
-  await audit(user.id, "source_domain.add", domain, { status, publisher });
-  revalidatePath("/admin");
-  return { status: "ok", message: `${domain} added as ${status}.` };
-}
-
-export async function setSourceStatusAction(domain: string, status: "allowed" | "blocked" | "review"): Promise<AdminResult> {
-  const { user } = await requireAdmin();
-  const d = domainSchema.safeParse(domain);
-  if (!d.success || !["allowed", "blocked", "review"].includes(status)) return { status: "error", message: "Invalid input." };
-  if (isBlockedDomain(d.data) && status !== "blocked") return { status: "error", message: `${d.data} is hard-blocked in code; it stays blocked.` };
-  const patch: Record<string, unknown> = { status };
-  if (status === "blocked") patch.revoked_at = new Date().toISOString();
-  if (status === "allowed") patch.revoked_at = null;
-  const { error } = await supabaseAdmin().from("source_domains").update(patch).eq("domain", d.data);
-  if (error) return { status: "error", message: error.message };
-  await audit(user.id, "source_domain.status", d.data, { status });
-  revalidatePath("/admin");
-  return { status: "ok", message: `${d.data} is now ${status}.` };
-}
-
-export async function toggleSourceRightAction(domain: string, flag: string, value: boolean): Promise<AdminResult> {
-  const { user } = await requireAdmin();
-  const d = domainSchema.safeParse(domain);
-  if (!d.success || !RIGHT_FLAGS.includes(flag as RightFlag)) return { status: "error", message: "Invalid input." };
+  const attribution_text = str(formData, "attribution_text") || null;
   const { error } = await supabaseAdmin()
     .from("source_domains")
-    .update({ [flag]: Boolean(value) })
+    .upsert({ domain, status: source_type === "excluded" ? "blocked" : "allowed", source_type, publisher, attribution_text }, { onConflict: "domain" });
+  if (error) return { status: "error", message: error.message };
+  await audit(user.id, "source_domain.add", domain, { source_type, publisher });
+  revalidatePath("/admin");
+  return { status: "ok", message: `${domain} recorded as ${source_type.replace("_", " ")}.` };
+}
+
+export async function setSourceTypeAction(domain: string, sourceType: string): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  const d = domainSchema.safeParse(domain);
+  if (!d.success || !SOURCE_TYPES.includes(sourceType as SourceType)) return { status: "error", message: "Invalid input." };
+  if (isBlockedDomain(d.data) && sourceType !== "excluded") return { status: "error", message: `${d.data} is hard-excluded in code; it stays excluded.` };
+  const { error } = await supabaseAdmin()
+    .from("source_domains")
+    .update({ source_type: sourceType, status: sourceType === "excluded" ? "blocked" : "allowed" })
     .eq("domain", d.data);
   if (error) return { status: "error", message: error.message };
-  await audit(user.id, "source_domain.right", d.data, { flag, value: Boolean(value) });
+  await audit(user.id, "source_domain.type", d.data, { source_type: sourceType });
   revalidatePath("/admin");
-  return { status: "ok", message: `${flag} ${value ? "on" : "off"} for ${d.data}.` };
+  revalidatePath("/value");
+  return { status: "ok", message: `${d.data} is now ${sourceType.replace("_", " ")}.` };
+}
+
+export async function updateSourceAction(formData: FormData): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  const d = domainSchema.safeParse(str(formData, "domain"));
+  if (!d.success) return { status: "error", message: "Invalid domain." };
+  const publisher = str(formData, "publisher") || null;
+  const attribution_text = str(formData, "attribution_text") || null;
+  const notes = str(formData, "notes") || null;
+  const { error } = await supabaseAdmin().from("source_domains").update({ publisher, attribution_text, notes }).eq("domain", d.data);
+  if (error) return { status: "error", message: error.message };
+  await audit(user.id, "source_domain.update", d.data, { publisher, attribution_text, notes });
+  revalidatePath("/admin");
+  return { status: "ok", message: `${d.data} updated.` };
+}
+
+/** Removal on complaint: the source's listings stop being served, valued and revealed. */
+export async function removeSourceAction(domain: string, reason: string): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  const d = domainSchema.safeParse(domain);
+  const r = z.string().trim().min(3).max(500).safeParse(reason ?? "");
+  if (!d.success) return { status: "error", message: "Invalid domain." };
+  if (!r.success) return { status: "error", message: "Give a short reason (who complained, when)." };
+  const { error } = await supabaseAdmin().rpc("remove_source", { p_domain: d.data, p_reason: r.data, p_actor: user.id });
+  if (error) return { status: "error", message: error.message };
+  revalidatePath("/admin");
+  revalidatePath("/value");
+  revalidatePath("/deals");
+  return { status: "ok", message: `${d.data} removed. Its listings no longer appear anywhere.` };
+}
+
+export async function recordComplaintAction(domain: string): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  const d = domainSchema.safeParse(domain);
+  if (!d.success) return { status: "error", message: "Invalid domain." };
+  const { error } = await supabaseAdmin().from("source_domains").update({ complaint_received_at: new Date().toISOString() }).eq("domain", d.data);
+  if (error) return { status: "error", message: error.message };
+  await audit(user.id, "source_domain.complaint", d.data, null);
+  revalidatePath("/admin");
+  return { status: "ok", message: `Complaint recorded for ${d.data}.` };
+}
+
+export async function restoreSourceAction(domain: string): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  const d = domainSchema.safeParse(domain);
+  if (!d.success) return { status: "error", message: "Invalid domain." };
+  const { error } = await supabaseAdmin().from("source_domains").update({ removed_at: null, removal_reason: null }).eq("domain", d.data);
+  if (error) return { status: "error", message: error.message };
+  await audit(user.id, "source_domain.restore", d.data, null);
+  revalidatePath("/admin");
+  revalidatePath("/value");
+  return { status: "ok", message: `${d.data} restored.` };
 }
 
 /* ---------------------------------------------------------------- Review queue */
@@ -90,10 +124,8 @@ export async function reviewSnapshotAction(snapshotId: string, decision: "approv
   const { data: snap } = await admin.from("listing_snapshots").select("id,status,source_domain,business_id").eq("id", snapshotId).maybeSingle();
   if (!snap) return { status: "error", message: "Snapshot not found." };
   if (decision === "approve") {
-    const { data: rights } = await admin.from("source_domains").select("status,may_store,revoked_at").eq("domain", snap.source_domain).maybeSingle();
-    if (!rights || rights.status !== "allowed" || !rights.may_store || rights.revoked_at) {
-      return { status: "error", message: `Cannot approve: ${snap.source_domain} is not an allowed source with storage rights.` };
-    }
+    const { data: live } = await admin.rpc("source_is_live", { p_domain: snap.source_domain });
+    if (live === false) return { status: "error", message: `Cannot approve: ${snap.source_domain} is excluded or was removed on complaint.` };
     const { error } = await admin.from("listing_snapshots").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", snapshotId);
     if (error) return { status: "error", message: error.message };
     await admin.from("source_submissions").update({ status: "approved" }).eq("snapshot_id", snapshotId);
@@ -165,4 +197,28 @@ export async function recomputeAllAction(): Promise<AdminResult> {
     console.error("recompute failed", err);
     return { status: "error", message: "Recompute failed. Check the server logs." };
   }
+}
+
+/** Void a forecast (fraud, duplicate account, NDA breach). The RPC writes its own audit row. */
+export async function voidForecastAction(forecastId: string, reason: string): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  const id = z.string().uuid().safeParse(forecastId);
+  const r = z.string().trim().min(3).max(500).safeParse(reason ?? "");
+  if (!id.success) return { status: "error", message: "Invalid forecast." };
+  if (!r.success) return { status: "error", message: "Give a short reason." };
+  const admin = supabaseAdmin();
+  const { data: f } = await admin.from("forecast_submissions").select("snapshot_id,voided_at").eq("id", id.data).maybeSingle();
+  if (!f) return { status: "error", message: "Forecast not found." };
+  if (f.voided_at) return { status: "error", message: "Already voided." };
+  const { error } = await admin.rpc("void_forecast", { p_forecast: id.data, p_reason: r.data, p_actor: user.id });
+  if (error) return { status: "error", message: error.message };
+  try {
+    await recomputeSnapshot(f.snapshot_id, null);
+  } catch (err) {
+    console.error("recompute after void failed", err);
+  }
+  revalidatePath("/admin");
+  revalidatePath("/value");
+  revalidatePath("/points");
+  return { status: "ok", message: "Forecast voided and the listing re-scored." };
 }

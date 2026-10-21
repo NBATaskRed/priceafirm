@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { revealUrlAction, type RevealUrlResult } from "@/lib/actions/deals";
-import { revealCost } from "@/lib/domain/assumed";
+import { revealCost } from "@/lib/domain/types";
 import { Button, Notice } from "./ui";
 
 function valuationsWord(n: number) {
@@ -16,24 +16,22 @@ function valuationsWord(n: number) {
 export function RevealUrl({
   businessId,
   nInd,
-  mayLink,
   alreadyUnlocked,
   selfSubmitted = false,
   balance,
   publisher,
-  attributionRequired,
+  attributionText = null,
   initialUrl = null,
   initialCharged = null,
   size = "md",
 }: {
   businessId: string;
   nInd: number;
-  mayLink: boolean;
   alreadyUnlocked: boolean;
   selfSubmitted?: boolean;
   balance: number;
   publisher: string | null;
-  attributionRequired: boolean;
+  attributionText?: string | null;
   initialUrl?: string | null;
   initialCharged?: boolean | null;
   size?: "sm" | "md";
@@ -72,13 +70,9 @@ export function RevealUrl({
             <>Already unlocked, no charge.</>
           )}
         </p>
-        {attributionRequired && publisher ? <p className="mt-1 text-xs text-muted">Listing published by {publisher}.</p> : null}
+        {attributionText || publisher ? <p className="mt-1 text-xs text-muted">{attributionText ?? `Listing published by ${publisher}.`}</p> : null}
       </div>
     );
-  }
-
-  if (!mayLink) {
-    return <p className="mt-2 text-sm text-muted">The source does not permit URL reveals for this listing.</p>;
   }
 
   const label = alreadyUnlocked

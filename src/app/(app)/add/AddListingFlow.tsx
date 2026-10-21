@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import type { Confidence } from "@/lib/domain/types";
-import { requestSourceReviewAction, submitListingAction, validateUrlAction, type SubmitListingResult, type ValidateUrlResult } from "@/lib/actions/listing";
-import { Button, ButtonLink, Card, FactsGrid, Notice, PointsRange } from "@/components/ui";
+import { impliedMultiple, type Confidence } from "@/lib/domain/types";
+import { submitListingAction, validateUrlAction, type SubmitListingResult, type ValidateUrlResult } from "@/lib/actions/listing";
+import { Button, ButtonLink, Card, FactsGrid, Notice, ScoreRange } from "@/components/ui";
 import { ValuationForm } from "@/components/ValuationForm";
 import { ConfidencePicker } from "@/components/ConfidencePicker";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -15,13 +15,11 @@ const STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID"
 export function AddListingFlow({ needsTerms }: { needsTerms: boolean }) {
   const [url, setUrl] = useState("");
   const [validation, setValidation] = useState<ValidateUrlResult | null>(null);
-  const [reviewMsg, setReviewMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   function check() {
     const raw = url.trim();
     if (!raw) return;
-    setReviewMsg(null);
     start(async () => {
       setValidation(await validateUrlAction(raw));
     });
@@ -37,7 +35,7 @@ export function AddListingFlow({ needsTerms }: { needsTerms: boolean }) {
           }}
         >
           <label htmlFor="listing-url" className="label">
-            Listing URL
+            Public broker listing page (not on the excluded list)
           </label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
@@ -58,7 +56,7 @@ export function AddListingFlow({ needsTerms }: { needsTerms: boolean }) {
               {pending && !validation ? "Checking" : "Check URL"}
             </Button>
           </div>
-          <p className="mt-2 text-xs text-muted">Blocked sources are rejected before anything is fetched. Tracking parameters are stripped automatically.</p>
+          <p className="mt-2 text-xs text-muted">Any public broker page works. Excluded sources are rejected before anything is fetched; tracking parameters are stripped automatically.</p>
         </form>
       </Card>
 
@@ -69,32 +67,6 @@ export function AddListingFlow({ needsTerms }: { needsTerms: boolean }) {
       ) : null}
 
       {validation?.status === "invalid" ? <Notice tone="error">{validation.message}</Notice> : null}
-
-      {validation?.status === "unknown_source" ? (
-        <Card>
-          <p className="font-semibold">{validation.domain} has not been cleared yet</p>
-          <p className="mt-1 text-sm text-muted">{validation.message} We fetch nothing from a source until its rights are reviewed.</p>
-          {reviewMsg ? (
-            <Notice tone="success" className="mt-3">
-              {reviewMsg}
-            </Notice>
-          ) : (
-            <Button
-              variant="secondary"
-              className="mt-3"
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  const r = await requestSourceReviewAction(url);
-                  setReviewMsg(r.message);
-                })
-              }
-            >
-              Submit for rights review
-            </Button>
-          )}
-        </Card>
-      ) : null}
 
       {validation?.status === "existing" ? <ExistingListing v={validation} needsTerms={needsTerms} /> : null}
 
@@ -113,7 +85,7 @@ function ExistingListing({ v, needsTerms }: { v: Extract<ValidateUrlResult, { st
       </div>
       <div className="mt-5 border-t border-border pt-4">
         {v.exposed ? (
-          <Notice tone="warn" title="You previewed this deal, so a scored valuation isn't available">
+          <Notice tone="warn" title="You saw this listing in Find deals, so a scored valuation isn't available">
             You can still find it under Find deals or My unlocked listings.
           </Notice>
         ) : v.alreadyValued ? (
@@ -123,13 +95,11 @@ function ExistingListing({ v, needsTerms }: { v: Extract<ValidateUrlResult, { st
               See your valuation
             </ButtonLink>
           </div>
-        ) : v.contractToken && v.bounds ? (
+        ) : v.contractToken && v.cap != null ? (
           <div>
             <h3 className="text-lg font-semibold">What do you think this business is worth?</h3>
-            <p className="mb-4 mt-1 text-sm text-muted">
-              {v.nCount === 0 ? "No valuations yet." : `${v.nCount} independent ${v.nCount === 1 ? "valuation" : "valuations"} so far.`} Submitting the URL again earns nothing; a valuation can.
-            </p>
-            <ValuationForm snapshotId={v.snapshotId} contractToken={v.contractToken} bounds={v.bounds} needsTerms={needsTerms} compact />
+            <p className="mb-4 mt-1 text-sm text-muted">Submitting the URL again earns nothing; a valuation can.</p>
+            <ValuationForm snapshotId={v.snapshotId} contractToken={v.contractToken} cap={v.cap} nInd={v.nInd} earnings={v.snapshot.earnings} earningsType={v.snapshot.earnings_type} needsTerms={needsTerms} compact />
           </div>
         ) : (
           <p className="text-sm text-muted">{v.message}</p>
@@ -193,6 +163,7 @@ function NewListingForm({ v, needsTerms }: { v: Extract<ValidateUrlResult, { sta
     }
     if (terms) fd.set("acceptTerms", "true");
     fd.set("extracted", JSON.stringify(f));
+    if (v.fetchError) fd.set("fetchError", v.fetchError);
     if (f.title) fd.set("listingTitleRaw", f.title);
     start(async () => {
       setResult(await submitListingAction(fd));
@@ -215,12 +186,12 @@ function NewListingForm({ v, needsTerms }: { v: Extract<ValidateUrlResult, { sta
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-semibold">Detected facts</h2>
           <span className="text-xs text-muted">
-            {v.publisher ?? v.domain} · extraction quality {f.quality}
+            {v.publisher ?? v.domain} · {v.sourceType === "operator" ? "operator source" : "third-party source"} · extraction quality {f.quality}
           </span>
         </div>
         {v.fetchError ? (
           <Notice tone="warn" className="mt-3">
-            We could not read the page ({v.fetchError}). Enter the facts by hand from the listing.
+            We could not read the page ({v.fetchError}). Enter the facts by hand from the listing; the snapshot will get a quick check before it opens for valuation.
           </Notice>
         ) : (
           <p className="mt-1 text-sm text-muted">Correct anything that looks wrong. Keep the headline neutral: what the business does, not the broker&apos;s title.</p>
@@ -276,10 +247,18 @@ function NewListingForm({ v, needsTerms }: { v: Extract<ValidateUrlResult, { sta
 
       <Card>
         <h2 className="text-lg font-semibold">What do you think this business is worth?</h2>
-        <p className="mt-1 text-sm text-muted">You would be the first to value this listing, so the full point ranges apply.</p>
+        <p className="mt-1 text-sm text-muted">
+          Independent valuations on file: <span className="figures text-text">0</span>. You would be first, so the possible score is the widest: <ScoreRange cap={v.cap} />.
+        </p>
         <div className="mt-4 space-y-5">
-          <MoneyInput label="Your enterprise value estimate" name="value" value={value} onChange={setValue} hint="Cash-free, debt-free enterprise value. Optional if you only want to submit the URL." />
-          <ConfidencePicker value={confidence} onChange={setConfidence} bounds={v.bounds} name="confidence-new" />
+          <MoneyInput
+            label="Your enterprise value estimate"
+            name="value"
+            value={value}
+            onChange={setValue}
+            hint={`${impliedMultipleText(valueDigits, earnings, earningsType)}Cash-free, debt-free enterprise value. Optional if you only want to submit the URL.`}
+          />
+          <ConfidencePicker value={confidence} onChange={setConfidence} estimate={valueDigits ? Number(valueDigits) : null} cap={v.cap} name="confidence-new" />
           <div>
             <label htmlFor="why-new" className="label">
               Why? <span className="text-muted">(optional, private)</span>
@@ -292,7 +271,7 @@ function NewListingForm({ v, needsTerms }: { v: Extract<ValidateUrlResult, { sta
 
       {needsTerms ? <TermsCheckbox checked={terms} onChange={setTerms} id="terms-new" /> : null}
 
-      {result && result.status !== "approved" && result.status !== "pending_review" && result.status !== "duplicate" ? <Notice tone="error">{result.message}</Notice> : null}
+      {result ? <Notice tone="error">{result.message}</Notice> : null}
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" size="lg" disabled={pending || !baseOk || !valuationReady}>
@@ -303,11 +282,9 @@ function NewListingForm({ v, needsTerms }: { v: Extract<ValidateUrlResult, { sta
         </Button>
         <span className="text-xs text-muted">URL only earns no points.</span>
       </div>
-      {confidence ? (
-        <p className="text-sm text-muted">
-          Frozen range on submit: <PointsRange maxLoss={v.bounds[confidence].maxLoss} maxGain={v.bounds[confidence].maxGain} showBar={false} />
-        </p>
-      ) : null}
+      <p className="text-sm text-muted">
+        Frozen on submit: possible score <ScoreRange cap={v.cap} />
+      </p>
     </form>
   );
 }
@@ -316,7 +293,7 @@ function SubmitOutcome({ r }: { r: Extract<SubmitListingResult, { status: "appro
   if (r.status === "pending_review") {
     return (
       <Card>
-        <p className="text-sm text-accent">Awaiting review</p>
+        <p className="text-sm text-accent">Awaiting a quick check</p>
         <h2 className="text-xl font-semibold">Listing saved</h2>
         <p className="mt-2 text-sm text-text/90">{r.message}</p>
         <div className="mt-4 flex gap-3">
@@ -344,8 +321,8 @@ function SubmitOutcome({ r }: { r: Extract<SubmitListingResult, { status: "appro
       <h2 className="text-xl font-semibold">{r.valuation === "sealed" ? "URL added and valuation sealed" : "URL added"}</h2>
       {r.valuation === "sealed" ? (
         <p className="mt-2 text-sm">
-          Possible: <PointsRange maxLoss={r.maxLoss ?? 0} maxGain={r.maxGain ?? 0} />. Your score starts at 0.0 and your balance may rise or fall as additional independent opinions
-          arrive. Revealing this listing&apos;s URL is free for you.
+          Possible score: <ScoreRange cap={r.cap ?? 0} />. Your score starts at 0.0 and your balance may rise or fall as additional independent opinions arrive. Revealing
+          this listing&apos;s URL is free for you.
         </p>
       ) : r.valuation === "failed" ? (
         <Notice tone="warn" className="mt-3">
@@ -366,6 +343,13 @@ function SubmitOutcome({ r }: { r: Extract<SubmitListingResult, { status: "appro
       </div>
     </Card>
   );
+}
+
+function impliedMultipleText(digits: string, earnings: string, earningsType: "sde" | "ebitda" | "seller_cash_flow" | "unknown"): string {
+  const ev = Number(digits);
+  const e = Number(earnings.replace(/[^0-9]/g, ""));
+  const m = ev > 0 && e > 0 ? impliedMultiple(ev, { earnings: e, earnings_type: earningsType }) : null;
+  return m ? `= ${m} · ` : "";
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {

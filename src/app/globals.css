@@ -19,8 +19,8 @@
   --neg: #f28b82;
   --focus: #ffd27a;
 
-  --font-ui: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-figures: "Archivo", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-ui: var(--font-manrope), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-figures: var(--font-archivo), var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
 
   --radius-card: 10px;
   --radius-control: 6px;

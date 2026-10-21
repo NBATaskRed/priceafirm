@@ -2,20 +2,21 @@ import Link from "next/link";
 import { requireMember } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ForecastRow, LedgerRow, ListingSnapshot } from "@/lib/domain/types";
-import { BALANCE_SENTENCE, CONFIDENCE_LABEL, Card, EmptyState, Money, PageHeader, Points, PointsRange, fmtDate, locationText } from "@/components/ui";
+import { BALANCE_SENTENCE, CONFIDENCE_LABEL, Card, EmptyState, Money, PageHeader, Points, ScoreRange, fmtDate, locationText } from "@/components/ui";
 
 export const metadata = { title: "My Points" };
 
 const KIND_LABEL: Record<LedgerRow["kind"], string> = {
   WELCOME_GRANT: "Welcome grant",
   URL_REVEAL: "URL reveal",
+  URL_REVEAL_FREE: "URL reveal (free)",
   SCORE_CHANGE: "Score change",
   REFUND: "Refund",
   ADMIN_ADJUSTMENT: "Adjustment",
 };
 
 export default async function PointsPage() {
-  const { user, balance } = await requireMember();
+  const { user, profile, balance } = await requireMember();
   const admin = supabaseAdmin();
 
   const [{ data: fc }, { data: lg }, { count: unlockCount }, { data: sk }] = await Promise.all([
@@ -34,6 +35,8 @@ export default async function PointsPage() {
   for (const s of (sn ?? []) as Array<Pick<ListingSnapshot, "id" | "headline" | "industry" | "state" | "region" | "metro">>) snaps.set(s.id, s);
 
   const scoredCount = forecasts.filter((f) => Number(f.current_score) !== 0).length;
+  const floorClipped = Number((profile as unknown as { first5_floor_clipped?: number }).first5_floor_clipped ?? 0);
+  const first5Done = forecasts.filter((f) => !f.voided_at).length >= 5;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -64,6 +67,27 @@ export default async function PointsPage() {
       </div>
 
       <Card className="mt-4">
+        <p className="text-xs text-muted">Newcomer floor</p>
+        <p className="mt-1 text-sm">
+          Across your first 5 scored forecasts, your cumulative posted loss is floored at &minus;3.0.{" "}
+          {first5Done ? (
+            <span className="text-muted">Your first 5 are complete; the floor no longer applies to new forecasts.</span>
+          ) : (
+            <span className="text-muted">{5 - forecasts.filter((f) => !f.voided_at).length} of your first 5 remain under the floor.</span>
+          )}
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          {floorClipped > 0 ? (
+            <>
+              The floor has absorbed <span className="figures text-text">{floorClipped.toFixed(1)}</span> points of loss so far.
+            </>
+          ) : (
+            "The floor has not been needed so far."
+          )}
+        </p>
+      </Card>
+
+      <Card className="mt-4">
         <p className="text-xs text-muted">Skill percentile</p>
         {skill?.sufficient && skill.percentile != null ? (
           <p className="mt-1">
@@ -86,7 +110,7 @@ export default async function PointsPage() {
               </Link>
             }
           >
-            Your first valuation on a listing carries the widest possible point range.
+            Being first to value a listing carries the widest possible score range.
           </EmptyState>
         ) : (
           <div className="card overflow-x-auto">
@@ -96,7 +120,7 @@ export default async function PointsPage() {
                   <th>Business</th>
                   <th>Your value</th>
                   <th>Confidence</th>
-                  <th>Possible</th>
+                  <th>Possible score</th>
                   <th>Score</th>
                   <th>Date</th>
                 </tr>
@@ -117,11 +141,11 @@ export default async function PointsPage() {
                       </td>
                       <td>{CONFIDENCE_LABEL[f.confidence]}</td>
                       <td>
-                        <PointsRange maxLoss={Number(f.max_loss)} maxGain={Number(f.max_gain)} showBar={false} />
+                        <ScoreRange cap={Number(f.cap)} />
                       </td>
                       <td>
                         <Points value={Number(f.current_score)} words />
-                        <span className="block text-xs text-muted">can change</span>
+                        <span className="block text-xs text-muted">{f.voided_at ? "voided" : "can change"}</span>
                       </td>
                       <td className="figures whitespace-nowrap text-muted">{fmtDate(f.created_at)}</td>
                     </tr>

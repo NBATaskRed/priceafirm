@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { ListingSnapshot, SourceRights } from "@/lib/domain/types";
-import { Card, EmptyState, Money, PageHeader, fmtDate, locationText } from "@/components/ui";
-import { ActionButton, AddDomainForm, AddInviteForm, RecomputeButton, RightToggle, SourceStatusSelect } from "./AdminControls";
+import type { ListingSnapshot, SourceDomain } from "@/lib/domain/types";
+import { CONFIDENCE_LABEL, Card, EmptyState, Money, PageHeader, Points, fmtDate, locationText } from "@/components/ui";
+import { ActionButton, AddDomainForm, AddInviteForm, RecomputeButton, SourceRow, VoidForecastButton } from "./AdminControls";
 
 export const metadata = { title: "Admin" };
 
@@ -12,19 +12,10 @@ const TABS = [
   { key: "review", label: "Review queue" },
   { key: "invites", label: "Invites" },
   { key: "scoring", label: "Scoring" },
+  { key: "forecasts", label: "Forecasts" },
   { key: "audit", label: "Audit" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
-
-const RIGHTS: Array<{ key: keyof SourceRights & string; label: string }> = [
-  { key: "may_fetch", label: "Fetch" },
-  { key: "may_store", label: "Store" },
-  { key: "may_display_ask", label: "Show ask" },
-  { key: "may_display_ev_to_ask", label: "EV/ask" },
-  { key: "may_show_anonymous_preview", label: "Preview" },
-  { key: "may_link_original_listing", label: "Link URL" },
-  { key: "attribution_required", label: "Attribution" },
-];
 
 export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
   await requireAdmin();
@@ -51,18 +42,23 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
       {tab === "review" ? <ReviewTab /> : null}
       {tab === "invites" ? <InvitesTab /> : null}
       {tab === "scoring" ? <ScoringTab /> : null}
+      {tab === "forecasts" ? <ForecastsTab /> : null}
       {tab === "audit" ? <AuditTab /> : null}
     </div>
   );
 }
 
 async function SourcesTab() {
-  const { data } = await supabaseAdmin().from("source_domains").select("*").order("status").order("domain");
-  const rows = (data ?? []) as Array<SourceRights & { policy_note: string | null; effective_date: string | null }>;
+  const { data } = await supabaseAdmin().from("source_domains").select("*").order("source_type").order("domain");
+  const rows = (data ?? []) as Array<SourceDomain & { first_seen: string | null }>;
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="text-base font-semibold">Add a domain</h2>
+        <h2 className="text-base font-semibold">Record a domain</h2>
+        <p className="mt-1 text-sm text-muted">
+          Sources are permissionless: any public broker page is accepted and its domain is recorded on first submission. Use this to pre-register an operator
+          source, set attribution text, or add a domain to the excluded list.
+        </p>
         <AddDomainForm />
       </Card>
       <div className="card overflow-x-auto">
@@ -70,38 +66,22 @@ async function SourcesTab() {
           <thead>
             <tr>
               <th>Domain</th>
-              <th>Status</th>
-              {RIGHTS.map((r) => (
-                <th key={r.key}>{r.label}</th>
-              ))}
-              <th>Publisher</th>
+              <th>Type</th>
+              <th>Publisher / attribution</th>
+              <th>First seen</th>
+              <th>Complaint</th>
+              <th>Removed</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.domain}>
-                <td className="font-medium">
-                  {r.domain}
-                  {r.revoked_at ? <span className="block text-xs text-neg">revoked {fmtDate(r.revoked_at)}</span> : null}
-                </td>
-                <td>
-                  <SourceStatusSelect domain={r.domain} status={r.status} />
-                </td>
-                {RIGHTS.map((f) => (
-                  <td key={f.key}>
-                    <RightToggle domain={r.domain} flag={f.key} value={Boolean(r[f.key])} label={`${f.label} for ${r.domain}`} />
-                  </td>
-                ))}
-                <td className="text-muted">
-                  {r.publisher ?? ""}
-                  {r.policy_note ? <span className="block max-w-xs text-xs">{r.policy_note}</span> : null}
-                </td>
-              </tr>
+              <SourceRow key={r.domain} source={r} firstSeen={fmtDate(r.first_seen)} />
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={RIGHTS.length + 3} className="text-muted">
-                  No domains yet.
+                <td colSpan={7} className="text-muted">
+                  No domains recorded yet.
                 </td>
               </tr>
             ) : null}
@@ -303,6 +283,77 @@ async function ScoringTab() {
         </dl>
       </Card>
       <p className="text-xs text-muted">A daily cron at 06:00 UTC calls /api/cron/recompute with the CRON_SECRET bearer token and does the same work.</p>
+    </div>
+  );
+}
+
+async function ForecastsTab() {
+  const admin = supabaseAdmin();
+  const { data } = await admin
+    .from("forecast_submissions")
+    .select("id,user_id,snapshot_id,value,confidence,cap,current_score,raw_score,counts_toward_independent,voided_at,void_reason,information_level,created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  type Row = { id: string; user_id: string; snapshot_id: string; value: number; confidence: "low" | "medium" | "high"; cap: number; current_score: number; raw_score: number; counts_toward_independent: boolean; voided_at: string | null; void_reason: string | null; information_level: string; created_at: string };
+  const rows = (data ?? []) as Row[];
+  const userIds = [...new Set(rows.map((r) => r.user_id))];
+  const snapIds = [...new Set(rows.map((r) => r.snapshot_id))];
+  const [{ data: pr }, { data: sn }] = await Promise.all([
+    userIds.length ? admin.from("profiles").select("id,email").in("id", userIds) : Promise.resolve({ data: [] }),
+    snapIds.length ? admin.from("listing_snapshots").select("id,headline,state").in("id", snapIds) : Promise.resolve({ data: [] }),
+  ]);
+  const emails = new Map<string, string>();
+  for (const p of (pr ?? []) as Array<{ id: string; email: string }>) emails.set(p.id, p.email);
+  const snaps = new Map<string, { headline: string; state: string | null }>();
+  for (const x of (sn ?? []) as Array<{ id: string; headline: string; state: string | null }>) snaps.set(x.id, x);
+  return (
+    <div className="card overflow-x-auto">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Member</th>
+            <th>Listing</th>
+            <th>Value</th>
+            <th>Conf.</th>
+            <th>Cap</th>
+            <th>Score (raw)</th>
+            <th>Counts</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className={r.voided_at ? "opacity-60" : ""}>
+              <td className="figures whitespace-nowrap text-muted">{fmtDate(r.created_at)}</td>
+              <td>{emails.get(r.user_id) ?? r.user_id.slice(0, 8)}</td>
+              <td>
+                <Link href={`/value/${r.snapshot_id}`} className="hover:underline">
+                  {snaps.get(r.snapshot_id)?.headline ?? "Listing"}
+                </Link>
+                {r.information_level === "cim" ? <span className="ml-1 text-xs text-accent">CIM</span> : null}
+              </td>
+              <td>
+                <Money value={Number(r.value)} />
+              </td>
+              <td>{CONFIDENCE_LABEL[r.confidence]}</td>
+              <td className="figures">±{Number(r.cap).toFixed(1)}</td>
+              <td>
+                <Points value={Number(r.current_score)} /> <span className="figures text-xs text-muted">({Number(r.raw_score).toFixed(2)})</span>
+              </td>
+              <td className="text-muted">{r.voided_at ? `voided: ${r.void_reason ?? ""}` : r.counts_toward_independent ? "yes" : "no (same org)"}</td>
+              <td>{r.voided_at ? null : <VoidForecastButton forecastId={r.id} />}</td>
+            </tr>
+          ))}
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={9} className="text-muted">
+                No forecasts yet.
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
     </div>
   );
 }

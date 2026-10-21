@@ -3,11 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { acceptTerms, hasAcceptedTerms, requireMember } from "@/lib/auth/session";
-import { supabaseAdmin } from "@/lib/supabase/admin";
 import { validateSubmittedUrl, createSnapshotFromSubmission, type ValidationResult, type ExtractedFacts } from "@/lib/sources";
-import { normalizeUrl } from "@/lib/sources/normalize";
-import { sealForecast, valuationQuestion } from "@/lib/quant/service";
-import { allBounds } from "@/lib/quant/model";
+import { sealForecast } from "@/lib/quant/service";
+import { loadQuestion } from "@/lib/discovery/question";
+import { cap as capFor } from "@/lib/quant/model";
 import type { ListingSnapshot } from "@/lib/domain/types";
 import { forecastRateLimited, optStr, parseMoney, str, triState } from "./guards";
 
@@ -15,7 +14,6 @@ import { forecastRateLimited, optStr, parseMoney, str, triState } from "./guards
 export type ValidateUrlResult =
   | { status: "blocked"; message: string; domain: string }
   | { status: "invalid"; message: string }
-  | { status: "unknown_source"; message: string; domain: string; url: string }
   | {
       status: "existing";
       businessId: string;
@@ -25,17 +23,18 @@ export type ValidateUrlResult =
       snapshot: ListingSnapshot;
       message: string;
       contractToken: string | null;
-      bounds: ReturnType<typeof allBounds> | null;
-      nCount: number;
+      cap: number | null;
+      nInd: number;
     }
   | {
       status: "new";
       url: string;
       domain: string;
       publisher: string | null;
+      sourceType: "operator" | "third_party";
       facts: ExtractedFacts;
       fetchError?: string;
-      bounds: ReturnType<typeof allBounds>;
+      cap: number;
     };
 
 export async function validateUrlAction(raw: string): Promise<ValidateUrlResult> {
@@ -56,10 +55,8 @@ export async function validateUrlAction(raw: string): Promise<ValidateUrlResult>
       return { status: "blocked", message: result.message, domain: result.domain };
     case "invalid":
       return { status: "invalid", message: result.message };
-    case "unknown_source":
-      return { status: "unknown_source", message: result.message, domain: result.domain, url: result.url };
     case "existing": {
-      const q = !result.exposed && !result.alreadyValued ? await valuationQuestion(result.snapshotId) : null;
+      const q = !result.exposed && !result.alreadyValued ? await loadQuestion(result.snapshotId) : null;
       return {
         status: "existing",
         businessId: result.businessId,
@@ -69,8 +66,8 @@ export async function validateUrlAction(raw: string): Promise<ValidateUrlResult>
         snapshot: result.snapshot,
         message: result.message,
         contractToken: q?.contractToken ?? null,
-        bounds: q?.bounds ?? null,
-        nCount: q?.nCount ?? 0,
+        cap: q?.cap ?? null,
+        nInd: q?.nInd ?? result.snapshot.independent_count ?? 0,
       };
     }
     case "new":
@@ -78,36 +75,13 @@ export async function validateUrlAction(raw: string): Promise<ValidateUrlResult>
         status: "new",
         url: result.url,
         domain: result.domain,
-        publisher: result.rights.publisher,
+        publisher: result.source.publisher,
+        sourceType: result.source.source_type === "operator" ? "operator" : "third_party",
         facts: result.facts,
         fetchError: result.fetchError,
-        bounds: allBounds(0),
+        cap: capFor(0),
       };
   }
-}
-
-export type RequestSourceReviewResult = { status: "ok"; message: string } | { status: "invalid"; message: string };
-
-/** Unknown domain: store a rights-review request. Nothing is fetched and no snapshot is created. */
-export async function requestSourceReviewAction(raw: string): Promise<RequestSourceReviewResult> {
-  const { user } = await requireMember();
-  const n = normalizeUrl(raw ?? "");
-  if (!n.ok) return { status: "invalid", message: n.reason };
-  const admin = supabaseAdmin();
-  const { error } = await admin.from("source_submissions").insert({
-    user_id: user.id,
-    submitted_url: String(raw).trim().slice(0, 2048),
-    normalized_url: n.url,
-    domain: n.domain,
-    status: "pending_review",
-    reason: "unknown_source: rights review requested",
-  });
-  if (error) {
-    console.error("source_submissions insert failed", error);
-    return { status: "invalid", message: "Could not record the request. Try again." };
-  }
-  await admin.from("source_domains").upsert({ domain: n.domain, status: "review" }, { onConflict: "domain", ignoreDuplicates: true });
-  return { status: "ok", message: `Thanks. ${n.domain} is queued for a rights review. Nothing was fetched, and you will be able to value listings from it once it is cleared.` };
 }
 
 const listingSchema = z.object({
@@ -131,12 +105,13 @@ const listingSchema = z.object({
   confidence: z.enum(["low", "medium", "high"]).nullable(),
   rationale: z.string().trim().max(500).nullable(),
   acceptTerms: z.boolean(),
+  fetchError: z.string().max(300).nullable(),
   extracted: z.string().max(200_000).nullable(),
   listingTitleRaw: z.string().trim().max(300).nullable(),
 });
 
 export type SubmitListingResult =
-  | { status: "approved"; snapshotId: string; businessId: string; valuation: "sealed" | "not_requested" | "failed"; valuationMessage?: string; maxGain?: number; maxLoss?: number }
+  | { status: "approved"; snapshotId: string; businessId: string; valuation: "sealed" | "not_requested" | "failed"; valuationMessage?: string; cap?: number }
   | { status: "pending_review"; snapshotId: string; businessId: string; message: string }
   | { status: "duplicate"; snapshotId: string; businessId: string; message: string }
   | { status: "terms_required" | "invalid" | "rate_limited" | "blocked"; message: string };
@@ -174,6 +149,7 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
     confidence: withValuation ? str(formData, "confidence") || null : null,
     rationale: optStr(formData, "rationale"),
     acceptTerms: str(formData, "acceptTerms") === "on" || str(formData, "acceptTerms") === "true",
+    fetchError: optStr(formData, "fetchError"),
     extracted: optStr(formData, "extracted"),
     listingTitleRaw: optStr(formData, "listingTitleRaw"),
   });
@@ -213,13 +189,14 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
   }
   if (validation.status === "blocked") return { status: "blocked", message: validation.message };
   if (validation.status === "invalid") return { status: "invalid", message: validation.message };
-  if (validation.status === "unknown_source") return { status: "invalid", message: "This source has not been cleared yet. Request a rights review instead." };
   if (validation.status === "existing") {
     return { status: "duplicate", snapshotId: validation.snapshotId, businessId: validation.businessId, message: "This listing is already on PriceAFirm." };
   }
 
   let extracted: ExtractedFacts | null = null;
-  if (input.extracted) {
+  if (validation.fetchError) {
+    extracted = null;
+  } else if (input.extracted) {
     try {
       extracted = JSON.parse(input.extracted) as ExtractedFacts;
     } catch {
@@ -243,7 +220,6 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
         state: input.state,
         metro: input.metro,
         askingPrice: input.askingPrice,
-        askBasis: "ev",
         revenue: input.revenue,
         revenuePeriod: input.revenuePeriod,
         earnings: input.earnings,
@@ -254,6 +230,7 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
         dealTermsNote: input.dealTermsNote,
       },
       extracted,
+      fetchError: validation.fetchError ?? null,
       listingTitleRaw: input.listingTitleRaw ?? extracted?.title ?? null,
     });
   } catch (err) {
@@ -273,8 +250,8 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
       snapshotId: created.snapshotId,
       businessId: created.businessId,
       message: input.withValuation
-        ? "The listing is saved and awaits review. Your valuation was not recorded; you can value it once it is approved, and we will not show you any crowd figures for it in the meantime."
-        : "The listing is saved and awaits review. You can value it once it is approved.",
+        ? "The listing is saved and awaits a quick check because we could not read the page ourselves. Your valuation was not recorded; you can value it once it is approved, and we will not show you any crowd figures for it in the meantime."
+        : "The listing is saved and awaits a quick check because we could not read the page ourselves. You can value it once it is approved.",
     };
   }
 
@@ -282,7 +259,7 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
     return { status: "approved", snapshotId: created.snapshotId, businessId: created.businessId, valuation: "not_requested" };
   }
 
-  const q = await valuationQuestion(created.snapshotId);
+  const q = await loadQuestion(created.snapshotId);
   if (!q) {
     return { status: "approved", snapshotId: created.snapshotId, businessId: created.businessId, valuation: "failed", valuationMessage: "The listing was saved but is not open for valuation yet." };
   }
@@ -297,9 +274,9 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
     });
     revalidatePath("/points");
     if (sealed.status === "sealed") {
-      return { status: "approved", snapshotId: created.snapshotId, businessId: created.businessId, valuation: "sealed", maxGain: sealed.bounds.maxGain, maxLoss: sealed.bounds.maxLoss };
+      return { status: "approved", snapshotId: created.snapshotId, businessId: created.businessId, valuation: "sealed", cap: sealed.cap };
     }
-    const msg = sealed.status === "bounds_changed" ? "The point range changed before sealing. Open the listing to value it with the current range." : sealed.message;
+    const msg = sealed.status === "bounds_changed" ? "The possible score range changed before sealing. Open the listing to value it with the current range." : sealed.message;
     return { status: "approved", snapshotId: created.snapshotId, businessId: created.businessId, valuation: "failed", valuationMessage: msg };
   } catch (err) {
     console.error("sealForecast failed", err);

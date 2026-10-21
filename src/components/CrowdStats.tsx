@@ -22,7 +22,7 @@ function concentrationWord(c: number | null): string {
 }
 
 /**
- * Model-derived crowd statistics. Only ever rendered after exposure (preview, done page, unlocked).
+ * Model-derived crowd statistics. Only ever rendered after exposure (Find deals rows, done page, unlocked).
  * Ask-relative figures appear only when the source permits them.
  */
 export function CrowdStats({ stats }: { stats: CrowdStatsView }) {
@@ -35,7 +35,7 @@ export function CrowdStats({ stats }: { stats: CrowdStatsView }) {
             Asking price <Money value={stats.askingPrice} className="text-text" />.
           </p>
         ) : (
-          <p className="mt-1 text-muted">The source does not permit showing the asking price.</p>
+          <p className="mt-1 text-muted">No asking price was listed.</p>
         )}
         <p className="mt-2 text-xs text-muted">Be the first to value it from the queue and the pooled view will appear here.</p>
       </div>
@@ -109,7 +109,6 @@ export function CrowdStats({ stats }: { stats: CrowdStatsView }) {
           </div>
         </dl>
       </div>
-      {stats.askingPrice != null && stats.prAboveAsk == null ? <p className="mt-3 text-xs text-muted">The source permits showing the ask but not ask-relative statistics.</p> : null}
       <p className="mt-3 text-xs text-muted">
         {MODEL_DERIVED} Based on {stats.nCount} independent {stats.nCount === 1 ? "valuation" : "valuations"} (effective {stats.nEff.toFixed(1)}) plus a documented baseline.
       </p>

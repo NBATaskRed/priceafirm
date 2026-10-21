@@ -13,6 +13,8 @@ export interface Profile {
   accepted_terms_version: string | null;
   accepted_terms_at: string | null;
   buyer_profile: Record<string, unknown>;
+  /** Cumulative amount clipped by the newcomer floor over the first 5 scored forecasts. */
+  first5_floor_clipped: number;
 }
 
 /** Neutral, non-identifying listing facts. Safe to show in the Value queue. */

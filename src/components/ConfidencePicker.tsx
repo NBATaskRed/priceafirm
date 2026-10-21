@@ -2,7 +2,7 @@
 
 import type { Confidence } from "@/lib/domain/types";
 import { fmtMoney } from "@/lib/domain/types";
-import { assumedRange } from "@/lib/domain/assumed";
+import { assumedRange } from "@/lib/quant/model";
 import { CONFIDENCE_LABEL } from "./ui";
 
 const HINT: Record<Confidence, string> = {
@@ -47,7 +47,7 @@ export function ConfidencePicker({
                 <span className="font-semibold">{CONFIDENCE_LABEL[c]}</span>
                 {r ? (
                   <span className="figures text-xs text-muted">
-                    {fmtMoney(r.low, { compact: true })} to {fmtMoney(r.high, { compact: true })}
+                    {fmtMoney(r.lo, { compact: true })} to {fmtMoney(r.hi, { compact: true })}
                   </span>
                 ) : null}
               </span>
@@ -62,8 +62,8 @@ export function ConfidencePicker({
             <span className="font-medium">{CONFIDENCE_LABEL[value]}:</span>{" "}
             {estimate ? (
               <>
-                assumed range roughly <span className="figures">{fmtMoney(assumedRange(estimate, value).low, { compact: true })}</span> to{" "}
-                <span className="figures">{fmtMoney(assumedRange(estimate, value).high, { compact: true })}</span> (system-assumed).{" "}
+                assumed range roughly <span className="figures">{fmtMoney(assumedRange(estimate, value).lo, { compact: true })}</span> to{" "}
+                <span className="figures">{fmtMoney(assumedRange(estimate, value).hi, { compact: true })}</span> (system-assumed).{" "}
               </>
             ) : (
               <>enter your estimate to see the system-assumed range. </>

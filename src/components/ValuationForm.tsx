@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { EARNINGS_LABEL, type Confidence, type EarningsType } from "@/lib/domain/types";
+import { impliedMultiple as impliedMultipleBase, type Confidence, type EarningsType } from "@/lib/domain/types";
 import { submitForecastAction, type SubmitForecastResult } from "@/lib/actions/forecast";
 import { Button, Notice, ScoreRange } from "./ui";
 import { ConfidencePicker } from "./ConfidencePicker";
@@ -10,8 +10,9 @@ import { MoneyInput } from "./MoneyInput";
 import { TermsCheckbox } from "./TermsCheckbox";
 
 export function impliedMultiple(value: number | null, earnings: number | null, earningsType: EarningsType): string | null {
-  if (!value || !earnings || earnings <= 0 || earningsType === "unknown") return null;
-  return `= ${(value / earnings).toFixed(1)}x ${EARNINGS_LABEL[earningsType]}`;
+  if (!value) return null;
+  const m = impliedMultipleBase(value, { earnings, earnings_type: earningsType });
+  return m ? `= ${m}` : null;
 }
 
 export function ValuationForm({

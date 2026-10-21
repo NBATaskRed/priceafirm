@@ -21,7 +21,7 @@ export type SubmitForecastResult =
   | { status: "bounds_changed"; contractToken: string; cap: number; nInd: number; message: string }
   | { status: "terms_required"; message: string }
   | { status: "rate_limited"; message: string }
-  | { status: "exposed" | "already_submitted" | "invalid" | "frozen" | "snapshot_not_approved"; message: string };
+  | { status: "exposed" | "already_submitted" | "invalid" | "frozen" | "snapshot_not_approved" | "removed"; message: string };
 
 /**
  * Seal one blind valuation. Enforces: membership, terms acknowledgement, the daily forecast cap,
@@ -77,19 +77,18 @@ export async function submitForecastAction(formData: FormData): Promise<SubmitFo
     revalidatePath("/value");
     revalidatePath("/points");
     revalidatePath(`/value/${input.snapshotId}`);
-    const sealed = result as unknown as { bounds?: { maxGain: number }; cap?: number };
-    return { status: "sealed", snapshotId: input.snapshotId, forecastId: result.forecastId, cap: Number(sealed.cap ?? sealed.bounds?.maxGain ?? 0) };
+    return { status: "sealed", snapshotId: input.snapshotId, forecastId: result.forecastId, cap: result.cap };
   }
   if (result.status === "bounds_changed") {
-    const fresh = await loadQuestion(input.snapshotId);
     return {
       status: "bounds_changed",
-      contractToken: fresh?.contractToken ?? result.question.contractToken,
-      cap: fresh?.cap ?? 0,
-      nInd: fresh?.nInd ?? 0,
+      contractToken: result.question.contractToken,
+      cap: result.question.cap,
+      nInd: result.question.nInd,
       message: "Another independent valuation arrived while this form was open, so the possible score range changed. Confirm the new range to submit.",
     };
   }
+  if (result.status === "rate_limited") return { status: "rate_limited", message: result.message };
   return { status: result.status, message: result.message };
 }
 

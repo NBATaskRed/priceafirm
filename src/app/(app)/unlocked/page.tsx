@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireMember } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { loadCrowdStats, loadRightsMap } from "@/lib/discovery/listings";
+import { loadCrowdStats, loadSourceMap } from "@/lib/discovery/listings";
 import type { ListingSnapshot } from "@/lib/domain/types";
 import { Card, EmptyState, EvidenceBadge, FactsGrid, PageHeader, fmtDate, locationText } from "@/components/ui";
 import { CrowdStats } from "@/components/CrowdStats";
@@ -21,7 +21,7 @@ export default async function UnlockedPage() {
   if (!unlocks.length) {
     return (
       <div className="mx-auto max-w-3xl">
-        <PageHeader title="My unlocked listings" lede="Every original listing URL you have revealed, with the facts and crowd view as they stand now." />
+        <PageHeader title="My unlocked listings" lede="Every source URL you have revealed, with the facts and crowd view as they stand now." />
         <EmptyState
           title="No unlocked listings yet"
           action={
@@ -30,7 +30,7 @@ export default async function UnlockedPage() {
             </Link>
           }
         >
-          Preview an opportunity in Find deals, then reveal its original listing URL for 1 point.
+          Search in Find deals, then reveal a listing&apos;s source URL: free below 3 independent valuations, 1 point from 3 on.
         </EmptyState>
       </div>
     );
@@ -44,27 +44,27 @@ export default async function UnlockedPage() {
   ]);
   const snaps = new Map<string, ListingSnapshot>();
   for (const s of (sn ?? []) as ListingSnapshot[]) snaps.set(s.id, s);
-  const sources = new Map<string, SourceRow>();
-  for (const s of (src ?? []) as SourceRow[]) sources.set(s.snapshot_id, s);
-  const rights = await loadRightsMap([...snaps.values()].map((s) => s.source_domain));
+  const sourceRows = new Map<string, SourceRow>();
+  for (const s of (src ?? []) as SourceRow[]) sourceRows.set(s.snapshot_id, s);
+  const sources = await loadSourceMap([...snaps.values()].map((s) => s.source_domain));
 
   const items = await Promise.all(
     unlocks.map(async (u) => {
       const s = snaps.get(u.snapshot_id);
       if (!s) return null;
-      const r = rights.get(s.source_domain) ?? null;
-      const stats = await loadCrowdStats(s, r);
-      return { u, s, src: sources.get(u.snapshot_id) ?? null, stats, rights: r };
+      const src = sources.get(s.source_domain) ?? null;
+      const stats = await loadCrowdStats(s);
+      return { u, s, src: sourceRows.get(u.snapshot_id) ?? null, stats, source: src };
     }),
   );
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="My unlocked listings" lede="Every original listing URL you have revealed, with the facts and crowd view as they stand now." />
+      <PageHeader title="My unlocked listings" lede="Every source URL you have revealed, with the facts and crowd view as they stand now." />
       <ul className="space-y-5">
         {items.map((it) => {
           if (!it) return null;
-          const { u, s, src, stats, rights: r } = it;
+          const { u, s, src, stats, source } = it;
           const host = src ? safeHost(src.source_url) : null;
           return (
             <Card as="li" key={u.id}>
@@ -79,7 +79,7 @@ export default async function UnlockedPage() {
               </div>
 
               <div className="mt-4">
-                <FactsGrid snapshot={s} dense showAsk={stats.askingPrice != null} />
+                <FactsGrid snapshot={s} dense />
               </div>
 
               <div className="mt-5 border-t border-border pt-4">
@@ -98,13 +98,13 @@ export default async function UnlockedPage() {
                     <a href={src.source_url} target="_blank" rel="noopener noreferrer nofollow" className="btn btn-primary btn-sm">
                       Open listing{host ? ` on ${host}` : ""}
                     </a>
-                    <span className="text-sm text-muted">{src.broker_name ?? r?.publisher ?? s.source_domain}</span>
+                    <span className="text-sm text-muted">{src.broker_name ?? source?.publisher ?? s.source_domain}</span>
                   </div>
                 ) : (
                   <p className="text-sm text-muted">The listing URL is no longer available from the source.</p>
                 )}
                 {src ? <p className="mt-2 break-all text-xs text-muted">{src.source_url}</p> : null}
-                {r?.attribution_required && r.publisher ? <p className="mt-1 text-xs text-muted">Listing published by {r.publisher}.</p> : null}
+                {source?.attribution_text ? <p className="mt-1 text-xs text-muted">{source.attribution_text}</p> : null}
               </div>
             </Card>
           );

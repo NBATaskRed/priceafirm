@@ -128,12 +128,18 @@ export function ScoreRange({ cap, className = "" }: { cap: number; className?: s
  * Evidence
  * ------------------------------------------------------------------------- */
 export const EVIDENCE_TEXT: Record<PublishedStats["evidence"], string> = {
-  none: "Ask benchmark only",
-  very_limited: "Very limited evidence",
-  preliminary: "Preliminary evidence",
-  moderate: "Moderate evidence",
-  many: "Many valuations",
+  none: "No independent valuations yet",
+  single: "Single valuation",
+  preliminary: "Preliminary (2 valuations)",
+  established: "Established (3 or more)",
 };
+
+export function evidenceFor(n: number): PublishedStats["evidence"] {
+  if (n <= 0) return "none";
+  if (n === 1) return "single";
+  if (n === 2) return "preliminary";
+  return "established";
+}
 
 export function valuationsText(n: number): string {
   if (n <= 0) return "No independent valuations yet";
@@ -142,12 +148,16 @@ export function valuationsText(n: number): string {
 }
 
 export function EvidenceBadge({ nCount, evidence, className = "" }: { nCount: number; evidence?: PublishedStats["evidence"]; className?: string }) {
-  const level: PublishedStats["evidence"] = evidence ?? (nCount <= 0 ? "none" : nCount === 1 ? "very_limited" : nCount <= 4 ? "preliminary" : nCount <= 9 ? "moderate" : "many");
+  const level: PublishedStats["evidence"] = evidence ?? evidenceFor(nCount);
   return (
     <span className={`chip ${className}`}>
-      <span>{EVIDENCE_TEXT[level]}</span>
-      <span className="text-muted">&nbsp;·&nbsp;</span>
-      <span className="figures">{nCount <= 0 ? "no crowd valuation yet" : `${nCount} independent ${nCount === 1 ? "valuation" : "valuations"}`}</span>
+      {nCount <= 0 ? <span>No independent valuations yet</span> : <span className="figures">Based on {nCount} independent {nCount === 1 ? "valuation" : "valuations"}</span>}
+      {nCount > 0 ? (
+        <>
+          <span className="text-muted">&nbsp;·&nbsp;</span>
+          <span>{EVIDENCE_TEXT[level]}</span>
+        </>
+      ) : null}
     </span>
   );
 }

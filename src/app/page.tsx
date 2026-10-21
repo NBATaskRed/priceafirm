@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { Logo } from "@/components/Logo";
-import { ButtonLink, PointsRange } from "@/components/ui";
+import { ButtonLink, ScoreRange } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -67,19 +67,22 @@ export default async function Landing() {
               <p className="mt-1 text-xs text-muted">Cash-free, debt-free enterprise value. One number plus your confidence.</p>
               <ul className="mt-3 space-y-2 text-sm">
                 <li className="flex items-center justify-between gap-3">
-                  <span>Low confidence</span>
-                  <PointsRange maxLoss={1} maxGain={2} />
+                  <span>Possible score, any confidence</span>
+                  <ScoreRange cap={10} />
                 </li>
                 <li className="flex items-center justify-between gap-3">
-                  <span>Medium confidence</span>
-                  <PointsRange maxLoss={4} maxGain={7} />
+                  <span>High confidence, $2.9M estimate</span>
+                  <span className="figures text-muted">assumes $2.2M to $3.8M</span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
-                  <span>High confidence</span>
-                  <PointsRange maxLoss={8} maxGain={12} />
+                  <span>Low confidence, $2.9M estimate</span>
+                  <span className="figures text-muted">assumes $1.4M to $5.9M</span>
                 </li>
               </ul>
-              <p className="mt-3 text-xs text-muted">Possible point range for the first valuation on a listing. Ranges shrink as more independent opinions arrive.</p>
+              <p className="mt-3 text-xs text-muted">
+                The possible score is the same for every confidence level and shrinks as more independent opinions arrive. Confidence sets how sharply later
+                opinions move your score, in either direction.
+              </p>
             </div>
           </aside>
         </section>
@@ -87,15 +90,15 @@ export default async function Landing() {
         <section className="mt-20 grid gap-8 border-t border-border pt-12 md:grid-cols-3" aria-label="How it works">
           <Step n={1} title="Value a business blind">
             See only neutral listing facts: industry, location, ask, revenue and earnings. Submit one enterprise value estimate with Low, Medium or High
-            confidence. Your possible gain and loss are frozen the moment you submit.
+            confidence. Your possible score range is frozen the moment you submit.
           </Step>
           <Step n={2} title="Your balance moves as others weigh in">
             Each later independent valuation re-scores yours against how well it predicted the crowd. Scores can go up or down. Your balance may rise or
             fall as additional independent opinions arrive.
           </Step>
           <Step n={3} title="Spend points on deals you want">
-            Search in plain language, preview opportunities free, read the model-derived crowd view, and reveal the original listing URL for 1 point.
-            Previewing a deal makes you ineligible to earn points on that business.
+            Search in plain language and read the model-derived crowd view on every result. Reveal the source URL free while a listing has fewer than 3
+            valuations, 1 point from 3 on. Any listing you see in Find Deals can no longer earn you points.
           </Step>
         </section>
 
