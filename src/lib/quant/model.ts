@@ -8,7 +8,7 @@ import type { Confidence, EarningsType } from "@/lib/domain/types";
 export type { Confidence };
 
 export const KERNEL_VERSION = "kernel-v2";
-export const SCORING_VERSION = "proper-v2"; // proper log score vs F_before, coverage-only cap
+export const SCORING_VERSION = "quadratic-v3"; // quadratic (L2) proper score vs F_before, affine map, coverage-only cap
 export const POOL_VERSION = "pool-v2"; // model prior blended with ask
 export const MULTIPLE_TABLE_VERSION = "multiples-v0-placeholder";
 
@@ -26,11 +26,7 @@ export const POOL = {
 };
 
 export const SCORING = {
-  obsSigma: 0.3, // observation-noise floor for later human reports
-  // d0 and zRef were chosen by the offline scan in src/lib/quant/model.test.ts ("honest confidence
-  // maximizes expected score"): zRef < 1.5 lets symmetric clipping favour High for a Medium-truth agent.
-  d0: 2.0, // clip on per-judge log-score contribution
-  zRef: 1.5, // z/zRef linear map, clipped to [-1, 1]
+  obsSigma: 0.3, // observation-noise floor: later reports are noisy humans, not the true value
   capScale: 10, // C(m) = 10 * d(m)
   newcomerFloor: -3, // cumulative posted loss floor over first 5 scored forecasts
   newcomerCount: 5,
@@ -197,14 +193,91 @@ export function mixtureCdf(m: Mixture, x: number): number {
   for (const c of m.comps) p += c.w * normCdf(x, c.mu, c.sigma);
   return p;
 }
-/** g(y|F): F smoothed by the observation-noise floor. */
+/** g(y|F): F smoothed by the observation-noise floor (log density; diagnostics only). */
 export function logPredictive(m: Mixture, y: number): number {
   return Math.log(Math.max(mixturePdf(m, y, SCORING.obsSigma ** 2), 1e-300));
 }
-/** log q_i(y): the user's own kernel smoothed by the same floor. */
-export function logKernel(logValue: number, confidence: Confidence, y: number): number {
-  const s = Math.sqrt(SIGMA[confidence] ** 2 + SCORING.obsSigma ** 2);
-  return Math.log(Math.max(normPdf(y, logValue, s), 1e-300));
+
+/* ---------------------------------------------------------------------------------------------
+ * Scoring rule (design Section 6.3, v2.3): quadratic proper score, no clipping.
+ *
+ *   q_i      = N(log v_i, sigma_c^2 + obs^2)          the forecaster's smoothed kernel
+ *   g        = F_before smoothed by obs^2             the crowd before i, frozen at submission
+ *   QS(p, y) = 2 p(y) - integral p^2                  strictly proper, bounded for these p
+ *   D_ij     = QS(q_i, y_j) - QS(g, y_j)              y_j = log of a later independent report
+ *   score_i  = C(m_i) * mean_j D_ij / R_i
+ *
+ * R_i is the largest |D| any menu choice can produce against this g (computed from g and the menu,
+ * never from the choice), so |score_i| <= C(m_i) always and no clip is ever applied. Every step after
+ * QS is affine with choice-independent coefficients, so expected points are maximized exactly by
+ * reporting the kernel closest (in L2) to your belief about later reports: honest center, honest width.
+ * ------------------------------------------------------------------------------------------- */
+
+const INV_SQRT_2PI = 1 / Math.sqrt(2 * Math.PI);
+const INV_2_SQRT_PI = 1 / (2 * Math.sqrt(Math.PI));
+
+export function kernelSd(confidence: Confidence): number {
+  return Math.sqrt(SIGMA[confidence] ** 2 + SCORING.obsSigma ** 2);
+}
+
+/** QS of the forecaster's kernel at y. */
+export function qsKernel(logValue: number, confidence: Confidence, y: number): number {
+  const s = kernelSd(confidence);
+  return 2 * normPdf(y, logValue, s) - INV_2_SQRT_PI / s;
+}
+
+function smoothed(m: Mixture) {
+  return m.comps.map((c) => ({ w: c.w, mu: c.mu, s: Math.sqrt(c.sigma * c.sigma + SCORING.obsSigma ** 2) }));
+}
+
+/** integral of g^2 for a Gaussian mixture, in closed form. */
+export function mixtureL2(m: Mixture): number {
+  const cs = smoothed(m);
+  let t = 0;
+  for (const a of cs) for (const b of cs) t += a.w * b.w * normPdf(a.mu, b.mu, Math.sqrt(a.s * a.s + b.s * b.s));
+  return t;
+}
+
+/** QS of the crowd baseline at y. */
+export function qsMixture(m: Mixture, y: number): number {
+  let p = 0;
+  for (const c of smoothed(m)) p += c.w * normPdf(y, c.mu, c.s);
+  return 2 * p - mixtureL2(m);
+}
+
+/** Choice-independent normalizer: max |D| over every menu kernel, every center and every y. */
+export function scoreRange(m: Mixture): number {
+  const l2 = mixtureL2(m);
+  const peakBound = smoothed(m).reduce((t, c) => t + (c.w * INV_SQRT_2PI) / c.s, 0); // >= max_y g(y)
+  let up = 0;
+  let down = 0;
+  for (const c of ["low", "medium", "high"] as Confidence[]) {
+    const s = kernelSd(c);
+    up = Math.max(up, 2 * INV_SQRT_2PI / s - INV_2_SQRT_PI / s + l2); // best y for q, worst for g
+    down = Math.max(down, INV_2_SQRT_PI / s + 2 * peakBound - l2); // y far from q, at g's peak
+  }
+  return Math.max(up, down);
+}
+
+/** D_ij = QS(q_i, y_j) - QS(g, y_j). Unclipped. */
+export function deltaIJ(fBefore: Mixture, logValue: number, confidence: Confidence, yj: number): number {
+  return qsKernel(logValue, confidence, yj) - qsMixture(fBefore, yj);
+}
+
+/** Affine map to points. The clamp is a safety net that cannot bind (|z| <= R by construction). */
+export function mapScore(z: number, capValue: number, range: number): number {
+  const x = range > 0 ? z / range : 0;
+  return round(capValue * Math.max(-1, Math.min(1, x)), 4);
+}
+
+export function scoreForecast(
+  contract: { fBefore: Mixture; logValue: number; confidence: Confidence; cap: number },
+  laterLogValues: number[],
+): { z: number; score: number; laterCount: number } {
+  if (!laterLogValues.length) return { z: 0, score: 0, laterCount: 0 };
+  const deltas = laterLogValues.map((y) => deltaIJ(contract.fBefore, contract.logValue, contract.confidence, y));
+  const z = deltas.reduce((t, d) => t + d, 0) / deltas.length; // plain mean: linear, so propriety survives averaging
+  return { z, score: mapScore(z, contract.cap, scoreRange(contract.fBefore)), laterCount: laterLogValues.length };
 }
 
 export function mixtureQuantile(m: Mixture, q: number): number {
@@ -291,33 +364,6 @@ export function cap(mBefore: number): number {
 export function assumedRange(value: number, confidence: Confidence): { lo: number; hi: number } {
   const k = Math.exp(1.2816 * SIGMA[confidence]);
   return { lo: value / k, hi: value * k };
-}
-
-/** Section 6.3: Δ_ij = log q_i(y_j) − log g(y_j | F_before_i), clipped. */
-export function deltaIJ(fBefore: Mixture, logValue: number, confidence: Confidence, yj: number): number {
-  const d = logKernel(logValue, confidence, yj) - logPredictive(fBefore, yj);
-  return Math.max(-SCORING.d0, Math.min(SCORING.d0, d));
-}
-
-export function robustAverage(values: number[]): number {
-  if (!values.length) return 0;
-  const v = [...values].sort((a, b) => a - b);
-  const t = v.length >= 5 ? v.slice(1, -1) : v;
-  return t.reduce((s, x) => s + x, 0) / t.length;
-}
-
-export function mapScore(z: number, capValue: number): number {
-  return round(capValue * Math.max(-1, Math.min(1, z / SCORING.zRef)), 4);
-}
-
-export function scoreForecast(
-  contract: { fBefore: Mixture; logValue: number; confidence: Confidence; cap: number },
-  laterLogValues: number[],
-): { z: number; score: number; laterCount: number } {
-  if (!laterLogValues.length) return { z: 0, score: 0, laterCount: 0 };
-  const deltas = laterLogValues.map((y) => deltaIJ(contract.fBefore, contract.logValue, contract.confidence, y));
-  const z = robustAverage(deltas);
-  return { z, score: mapScore(z, contract.cap), laterCount: laterLogValues.length };
 }
 
 /**

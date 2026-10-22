@@ -55,3 +55,15 @@ Spec of record: `docs/DESIGN.md`. Working rules for agents: `CLAUDE.md`.
    SCORING_MODE=live in Vercel.
 7. Nice to have: robots.txt check and per-domain rate limit in `safeFetch`, e2e tests (Playwright is
    preinstalled in cloud sessions), remove the deprecated `SourceRights` alias.
+
+## Paused Oct 22 (work in progress)
+- Scoring switched to the quadratic proper score (SCORING_VERSION quadratic-v3). Reason: the clipped log score
+  rewarded shading a valuation about 18% toward the crowd when the buyer's view was far from it. New engine
+  tests prove honest width, honest center, the exact L2 identity and |score| <= cap; all 17 pass.
+- Fixed: ledger postings keyed per evaluation (untriggered recomputes could post only once); newcomer floor
+  spillover to the buyer's other first-5 forecasts is now posted.
+- NOT yet run after these last edits: DB smoke test, full vitest, build, simulation. Run them first.
+- Design canvas "PriceAFirm UX": Email, Valuation form, Points, Value queue done. To do: Find deals artboard;
+  fix the form to show possible score +/-5.8 (2 prior valuations) and the reveal as 1 point (count 3 includes
+  the buyer; owner chose NOT to exclude own valuation).
+- Docs to update: design doc Section 6.3 (new scoring rule).

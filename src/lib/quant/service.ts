@@ -180,15 +180,9 @@ export async function recomputeSnapshot(snapshotId: string, triggerForecastId: s
     zById.set(i.id, { z, laterCount });
   }
 
-  const postedByUser = new Map<string, Map<string, number>>();
-  for (const i of rows) {
-    const raw = rawById.get(i.id)!;
-    if (!postedByUser.has(i.user_id)) postedByUser.set(i.user_id, await postedScoresForUser(i.user_id, rawById));
-    const posted = postedByUser.get(i.user_id)!.get(i.id) ?? raw;
-    const { z, laterCount } = zById.get(i.id)!;
-    if (Math.abs(posted - Number(i.current_score)) < 0.00005 && Math.abs(raw - Number(i.raw_score)) < 0.00005) continue;
+  const post = async (forecastId: string, raw: number, posted: number, z: number, laterCount: number) => {
     const { error: e2 } = await admin.rpc("post_score_change", {
-      p_forecast: i.id,
+      p_forecast: forecastId,
       p_trigger: triggerForecastId,
       p_later_count: laterCount,
       p_z: z,
@@ -198,6 +192,31 @@ export async function recomputeSnapshot(snapshotId: string, triggerForecastId: s
       p_live: live,
     });
     if (e2) throw e2;
+  };
+
+  // 1. Forecasts on this listing: every earlier one is rescored against all later reports now available.
+  const postedByUser = new Map<string, Map<string, number>>();
+  for (const i of rows) {
+    const raw = rawById.get(i.id)!;
+    if (!postedByUser.has(i.user_id)) postedByUser.set(i.user_id, await postedScoresForUser(i.user_id, rawById));
+    const posted = postedByUser.get(i.user_id)!.get(i.id) ?? raw;
+    const { z, laterCount } = zById.get(i.id)!;
+    if (Math.abs(posted - Number(i.current_score)) < 0.00005 && Math.abs(raw - Number(i.raw_score)) < 0.00005) continue;
+    await post(i.id, raw, posted, z, laterCount);
+  }
+
+  // 2. Newcomer floor spillover: a change here can move the floored scores of the same buyer's other
+  //    first-5 forecasts on other listings. Post those too, so the floor holds on the balance exactly.
+  const onThisListing = new Set(rows.map((r) => r.id));
+  for (const [, floored] of postedByUser) {
+    const others = [...floored.keys()].filter((id) => !onThisListing.has(id));
+    if (!others.length) continue;
+    const { data: cur } = await admin.from("forecast_submissions").select("id,current_score,raw_score").in("id", others);
+    for (const f of (cur ?? []) as Array<{ id: string; current_score: number; raw_score: number }>) {
+      const posted = floored.get(f.id)!;
+      if (Math.abs(posted - Number(f.current_score)) < 0.00005) continue;
+      await post(f.id, Number(f.raw_score), posted, 0, 0);
+    }
   }
   await refreshAggregate(snapshotId);
 }

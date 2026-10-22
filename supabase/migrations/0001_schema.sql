@@ -522,26 +522,28 @@ create or replace function post_score_change(
   p_raw_score numeric, p_posted_score numeric, p_scoring_version text, p_live boolean
 ) returns numeric
 language plpgsql security definer set search_path = public as $$
+-- Exactly-once effect: the forecast row is locked, the delta is (new posted score - current posted score),
+-- and the ledger insert plus current_score update commit together. A retry or a concurrent recompute
+-- therefore computes delta 0 and posts nothing, so the invariant current_score = sum of its ledger
+-- deltas always holds. Each posting is keyed by its own evaluation row.
 declare
   v_f forecast_submissions%rowtype;
   v_delta numeric;
+  v_eval uuid;
 begin
   select * into v_f from forecast_submissions where id = p_forecast for update;
   if not found then return 0; end if;
-  v_delta := round(p_posted_score - v_f.current_score, 4);
+  v_delta := case when p_live then round(p_posted_score - v_f.current_score, 4) else 0 end;
   insert into score_evaluations (forecast_id, triggered_by, later_count, z, previous_score, new_score, delta, scoring_version, raw_score)
-  values (p_forecast, p_trigger, p_later_count, p_z, v_f.current_score, p_posted_score, v_delta, p_scoring_version, p_raw_score);
+  values (p_forecast, p_trigger, p_later_count, p_z, v_f.current_score, p_posted_score, v_delta, p_scoring_version, p_raw_score)
+  returning id into v_eval;
   update forecast_submissions set raw_score = p_raw_score where id = p_forecast;
-  if p_live and v_delta <> 0 then
-    begin
-      insert into point_ledger (user_id, kind, amount, forecast_id, business_id, event_key, note)
-      values (v_f.user_id, 'SCORE_CHANGE', v_delta, p_forecast, v_f.business_id,
-              'SCORE_CHANGE:' || p_forecast::text || ':' || coalesce(p_trigger::text, 'recompute'),
-              'Later independent valuation revalued this forecast');
-    exception when unique_violation then
-      return 0;
-    end;
-    update forecast_submissions set current_score = p_posted_score where id = p_forecast;
+  if v_delta <> 0 then
+    insert into point_ledger (user_id, kind, amount, forecast_id, business_id, event_key, note)
+    values (v_f.user_id, 'SCORE_CHANGE', v_delta, p_forecast, v_f.business_id,
+            'SCORE_CHANGE:' || v_eval::text,
+            'Another buyer valued this business; your score was recalculated');
+    update forecast_submissions set current_score = round(p_posted_score, 4) where id = p_forecast;
   end if;
   return v_delta;
 end $$;

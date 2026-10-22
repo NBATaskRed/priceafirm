@@ -28,7 +28,7 @@ Supabase (Postgres + magic-link auth), Node 24. Same stack as fundstamp.com.
 - Reveal costs 1 point iff `independent_count >= 3` at reveal time and the user did not submit the URL; free otherwise; never recharge.
 - `independent_count` changes only inside `submit_forecast` / `void_forecast`, once per org cluster. Show it next to every crowd figure.
 - Find Deals writes a `find_deals_row` exposure for every row BEFORE returning it. Value Businesses never shows or orders by crowd figures.
-- Cap is `10/sqrt(1+n_eff_before)`, identical across confidence. Scoring parameters d0=2.0, zRef=1.5 keep honest confidence optimal; the test "honest confidence maximizes expected score" must pass after any parameter change.
+- Cap is `10/sqrt(1+n_eff_before)`, identical across confidence. Scoring is the quadratic (L2) proper score vs F_before, mapped affinely by a choice-independent normalizer (no clipping, plain mean). The "exact incentive compatibility" tests (honest width, honest center, L2 identity, bound) must pass after any change.
 - Ask is always EV. No ask-basis field. BizBuySell/BizQuest are excluded before any fetch.
 - Invite tokens are stored only as sha256 hashes; the outbox stores emails with sign-in links redacted. Listings in requests are identified by URL and onboarded first when new.
 - Crowd numbers are "model-derived, not offers". Scores are "peer-predictive", never "accuracy".
