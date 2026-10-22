@@ -24,3 +24,9 @@ select void_forecast((select id from forecast_submissions where user_id=(select 
 select 'after void count', independent_count from listing_snapshots where id=(select sid from L);  -- 2
 select remove_source('synergybb.com','test complaint',null);
 select 'reveal after removal', (r).status from (select reveal_url((select id from U where email='d@x.com'),(select bid from L)) r) x;  -- removed
+-- Invite plumbing: system-onboarded submission (no user), invite row, outbox row.
+insert into source_submissions (user_id, submitted_url, status) values (null, 'https://x.co/1', 'approved');
+insert into listing_invites (token_hash, snapshot_id, business_id, user_id, buyer_email, expires_at)
+  select 'h1', s.id, s.business_id, p.id, p.email, now() + interval '30 days' from listing_snapshots s, profiles p where s.headline='Regional logistics' and p.email='c@gmail.com';
+insert into mail_outbox (kind, to_email, subject, text_body, html_body, related_invite) select 'valuation_request','c@gmail.com','s','t','h', id from listing_invites;
+select 'invite+outbox', count(*) from mail_outbox;  -- 1

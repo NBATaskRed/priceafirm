@@ -12,8 +12,9 @@ export const metadata = { title: "Value this business" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export default async function ValueDetailPage({ params }: PageProps<"/value/[snapshotId]">) {
+export default async function ValueDetailPage({ params, searchParams }: PageProps<"/value/[snapshotId]">) {
   const { snapshotId } = await params;
+  const welcome = (await searchParams).welcome === "1";
   if (!UUID.test(snapshotId)) notFound();
   const { user, profile } = await requireMember();
 
@@ -39,6 +40,22 @@ export default async function ValueDetailPage({ params }: PageProps<"/value/[sna
         <span aria-hidden="true"> / </span>
         <span>{s.headline}</span>
       </nav>
+
+      {welcome ? (
+        <Notice tone="info" title={`Welcome${profile.display_name ? `, ${profile.display_name.split(/\s+/)[0]}` : ""}`} className="mb-6">
+          You have had the materials on this business for a little while. Tell us what you think it is worth: one number and your confidence. Your
+          valuation is private; others only see aggregate figures. Your account is ready, and you start with 3 points.{" "}
+          {profile.password_set ? null : (
+            <>
+              To sign in later, use an emailed link or{" "}
+              <Link href="/account" className="underline">
+                set a password
+              </Link>
+              .
+            </>
+          )}
+        </Notice>
+      ) : null}
 
       <header className="mb-6">
         <h1 className="text-2xl sm:text-3xl">{s.headline}</h1>

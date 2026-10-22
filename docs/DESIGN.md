@@ -1,9 +1,9 @@
 # PriceAFirm — Complete MVP Product Design and Decision Rationale
 
-> Repo copy of the spec of record (Project doc `claude/PriceAFirm_Product_Design_v2.2.md`, Oct 21 2026). If the Project copy is updated, refresh this file.
+> Repo copy of the spec of record (Project doc `claude/PriceAFirm_Product_Design_v2.2.md`, now at v2.3). Keep both in sync.
 
-**Version:** 2.2 (revised per Ashish's decisions of October 21, 2026: operator listings and buyer invites for cold start; permissionless third-party ingestion with removal on complaint; model prior; incentive-compatible confidence scoring; URL reveals free below 3 valuations; simplified Find Deals; ask always treated as EV; newcomer loss floor; owner-side-ready schema)  
-**Date:** October 21, 2026  
+**Version:** 2.3 (October 22, 2026: automated buyer valuation requests with auto-created accounts and auto-login links; listings identified by URL and onboarded on first request; password or email-link sign-in. Builds on 2.2, revised per Ashish's decisions of October 21, 2026: operator listings and buyer invites for cold start; permissionless third-party ingestion with removal on complaint; model prior; incentive-compatible confidence scoring; URL reveals free below 3 valuations; simplified Find Deals; ask always treated as EV; newcomer loss floor; owner-side-ready schema)  
+**Date:** October 22, 2026  
 **Status:** Build specification for an invited-user pilot, with explicitly flagged experimental scoring and statistical assumptions  
 **Website:** PriceAFirm.com (domain available; register it; trademark clearance not established)
 
@@ -18,7 +18,7 @@
 | Area | MVP decision | Reason |
 |---|---|---|
 | Universe | Businesses listed for sale: the operator's own NBA/Synergy listings first, then public listing pages on broker sites, ingested **without prior permission** and **removed on complaint**; BizBuySell excluded | Real inventory from day one without a partner program |
-| Cold start | Buyers who inquire on operator listings are **invited to value that listing** after NDA; **no house valuations** | The operator already has a stream of qualified buyers looking at each deal |
+| Cold start | Buyers who have had an operator listing's materials for **1 to 2 weeks** receive an **automated valuation request**: the buyer-qualification system sends PriceAFirm the buyer's name, email and the listing URL; PriceAFirm onboards the listing if new, **creates the account automatically**, and emails a link that **signs the buyer in and opens that listing's valuation form**; **no house valuations** | The operator already has a stream of qualified buyers looking at each deal; zero-friction entry converts them |
 | Economic question | Standardized cash-free/debt-free enterprise value (EV); **every asking price is treated as EV** (equity vs. asset basis is never known and never asked) | Makes independent values comparable without an unanswerable data field |
 | Listing updates | Freeze each imported snapshot and asking price; no automated refresh required in MVP | Avoids changing the question underneath participants |
 | Input | **One central valuation plus Low / Medium / High confidence**; implied multiple shown live | Fast, intuitive, and no false requirement to articulate a full subjective PDF |
@@ -35,6 +35,7 @@
 | Paid action | URL reveal is **free while a listing has fewer than 3 independent valuations**; **1 point** at 3 or more; repeated opens free | Price attaches to crowd-informed access, not to a URL anyone can find |
 | User-submitted deals | Submit any public broker listing URL (except excluded sites), parse facts, and **immediately offer valuation plus confidence and point range** | Captures judgments from buyers' normal deal-review workflow |
 | Reputation | Private, provisional peer-predictive **skill percentile**, after enough scored observations; no public leaderboard; opt-in **verified valuer** status later | Competitive feedback without falsely asserting known truth |
+| Sign-in | Email link at any time, or an optional password the buyer sets in Account; the emailed valuation link signs the buyer in automatically for 30 days | No signup step for invited buyers; no password required |
 | Confidentiality | No participant identities or individual forecasts displayed to other users, buyers, or brokers; no confidential/NDA-restricted information except where the operator's own NDA permits a valuation submission | Protects owners and participants |
 | Pilot | 30–50 invited buyers; operator listings first, third-party broker listings next | Tests viability under infrequent participation |
 
@@ -44,7 +45,7 @@ No share transactions, no price-changing market maker, no simulated cash portfol
 
 ### The principal user loop
 
-1. Sign up and receive **3 points**. Many invited users arrive through a link from an operator listing they already inquired on, which opens straight to that listing's valuation form.
+1. Receive **3 points** on an account PriceAFirm created for you. Most users arrive through an automated valuation request about an operator listing whose materials they have had for 1 to 2 weeks; its link signs them in and opens straight to that listing's valuation form. Later sign-ins use an email link or an optional password.
 2. Choose **Value businesses** to find relevant opportunities, sortable by **maximum possible points** (no crowd-value signal visible; the number of independent valuations already on file is shown).
 3. Enter a **central EV estimate** (implied multiple shown) and **Low / Medium / High confidence** after seeing the frozen listing facts; the possible signed point range is shown beforehand and is the same for every confidence level.
 4. Receive a saved score (initially 0 if there is no independent subsequent evidence); as other qualified users value the business, previous contributions are recalculated and the **single available balance** adjusts up or down.
@@ -585,6 +586,26 @@ Before a user's first forecast/URL contribution (and in the Terms), require conf
 
 **Removal SLA:** complaint acknowledged within 1 business day, listings removed within 3. The contact route is on every listing page.
 
+### Automated buyer valuation requests (operator listings)
+
+**Trigger.** The operator's buyer-qualification system (outside PriceAFirm) decides when a buyer has had a listing's materials for 1 to 2 weeks and sends PriceAFirm one message per buyer per listing: **buyer name, buyer email, listing URL**, plus an optional idempotency key and information level (default `cim`). The same buyer can appear in many messages for many listings; each message is handled independently against one account.
+
+**Listings are identified by URL.** PriceAFirm resolves the URL to a canonical business (URL hash, then canonical domain + listing ID, so tracking parameters or mirrors do not create duplicates). If the URL is new, PriceAFirm **onboards the listing first**: excluded-source check, safe fetch, facts-only extraction, snapshot creation. A new listing is approved automatically only when extraction found an asking price plus earnings or revenue; otherwise it lands in Admin > Review for an operator to complete the facts, and the buyer's request is **held** and emailed automatically when the listing is approved.
+
+**Account.** One account per email, created automatically on the first request (email marked verified, invited flag set, display name from the message, 3-point grant). Later requests for the same email reuse it.
+
+**Eligibility before sending.** No email is sent if the buyer already valued that business, or if they have Find Deals exposure to it (a scored valuation would be rejected). An open, unexpired request for the same buyer and listing is not re-sent unless the message asks for a resend; a resend mints a new link and the old one stops working.
+
+**Email.** Short and personal: "You've had the materials on [listing] for a little while. What do you think it is worth?", one button, a privacy line, and the link lifetime. No em dashes, no signature block. Every email is recorded in an outbox with the sign-in link redacted; when sending is not configured the email is captured there instead of delivered.
+
+**Link.** `/invite/<token>`: a random 256-bit token, stored only as a hash. Valid 30 days (configurable) and reusable until then, because corporate email scanners often open links before the recipient. Opening it signs the buyer into their own account (replacing any other session in that browser), records the open, and lands on that listing's valuation form with a short welcome note. Expired or revoked links fall back to the normal sign-in page with an explanation. Admins can resend or revoke any link.
+
+**Information level.** Forecasts submitted by a buyer with a request for that listing are tagged `information_level = cim` (or `listing` if the message says so), counted toward `n_ind` and scored normally. The request is marked submitted.
+
+**Later sign-ins.** The buyer can request a one-time email link at any time, or set a password under Account and sign in with email + password. Neither is required to use the valuation link.
+
+**Security.** The endpoint requires a bearer secret held only by the qualification system. Requests are idempotent on the caller's key. Responses never include other buyers' data.
+
 ---
 
 ## 14. Roles, screens and information architecture
@@ -600,8 +621,10 @@ Mobile bottom navigation: **Find Deals**, **Value**, **Add URL**, **Points**.
 | Screen | Essential content | Primary action | Deliberately omitted |
 |---|---|---|---|
 | Landing | “Find businesses other buyers may undervalue. Share your opinion to unlock more deals.” | Sign up / search | Exchange metaphors, animated stock ticker |
-| Signup | Email verification; brief acquisition profile; 3-point starting balance; newcomer floor explained | Get started | Payment details |
-| Invite landing (operator listing) | The invited listing's facts, straight into the valuation form | Submit valuation | Any crowd figure before submission |
+| Signup | Email verification; brief acquisition profile; 3-point starting balance; newcomer floor explained. Invited buyers skip this: their account is created automatically | Get started | Payment details |
+| Invite landing (operator listing) | Auto sign-in from the emailed link, welcome note, the listing's facts, straight into the valuation form | Submit valuation | Any crowd figure before submission; any signup or password step |
+| Sign in | Email me a link, or email + password | Sign in | Mandatory passwords |
+| Account | Set or change an optional password | Save | Profile pages visible to others |
 | Value queue | Industry/geo/size, snapshot date, possible score, **independent valuation count**, fit | Sort by **maximum points**, choose business | Crowd values, EV/ask, directional rank |
 | Valuation form | One EV amount with live implied multiple, Low/Medium/High with assumed range, fixed possible score, terms, count | Submit blind valuation | PDF sliders, essays |
 | Post-submission | Own forecast, score and cap, numeric crowd figure with count, **Reveal URL (free / 1 point)** | Reveal / value another | Claims of verified accuracy |
@@ -610,7 +633,7 @@ Mobile bottom navigation: **Find Deals**, **Value**, **Add URL**, **Points**.
 | Add URL | URL, excluded-source check, normalized facts, count, EV with multiple, confidence, cap | Submit URL + valuation | Uploads, pasted descriptions |
 | My Points | Single balance, forecast history, per-report deltas, URL deductions, newcomer floor status, percentile if qualified | Open history | Dual balances |
 | My Unlocked | Revealed URLs, snapshot date, broker link, current count, paid/free | Return to listing | Other users' histories |
-| Admin | Source states and complaints, queues, dedupe, voids, model versions, scoring audit, invite tracking | Approve/reject/remove | Public directory |
+| Admin | Source states and complaints, review queue with fact editing (approval releases held requests), dedupe, voids, model versions, scoring audit, valuation requests (send manually, resend, revoke, status), email outbox | Approve/reject/remove | Public directory |
 
 ### 14.3 Copy and interaction rules
 
@@ -638,20 +661,22 @@ Serious financial intelligence tool with an accessible reward loop. Dark charcoa
 - **Database:** PostgreSQL; transactional wallet, immutable ledger events, indexed listing filters.
 - **Quant engine:** Python + NumPy/SciPy service with versioned kernels, prior tables, mixture parameters and scores; a lightweight queue for recalculations.
 - **Natural-language interface:** LLM extraction of *filter intent only* into reviewed JSON; deterministic predicates; optional semantic industry index.
-- **Auth/security:** Email verification + passkeys/OAuth, invited-user gate, related-account checks, audited model deployments.
+- **Auth/security:** Email link sign-in plus optional password; accounts for invited buyers created server-side; invited-user gate, related-account checks, audited model deployments.
 - **URL ingestion:** Excluded-source list, safe fetch proxy, polite rate limits, facts-only parser, manual fallback.
-- **Operator integration:** the NBA buyer-qualification flow emits an invite link per (buyer, listing) after NDA; the link carries a signed token that pre-matches the listing and records the buyer's `information_level`.
+- **Operator integration:** the buyer-qualification system calls `POST /api/invites` with buyer name, email and listing URL once a buyer has had the materials for 1 to 2 weeks; PriceAFirm onboards the listing, creates the account, and emails the auto-login valuation link (see Section 13).
+- **Email:** transactional sender (Resend) for valuation requests; Supabase Auth email (custom SMTP) for one-time sign-in links.
 
 ### 15.2 Core tables and invariants
 
 | Table/entity | Fields and important invariants |
 |---|---|
-| `users` | pseudonymous internal ID, verification, org grouping, role, trust status, buyer filters, `first5_floor_state` |
+| `users` | pseudonymous internal ID, verification, org grouping, role, trust status, buyer filters, `first5_floor_state`, `password_set` |
 | `source_domains` | `source_type`, publisher, excluded flag, complaint/removal fields |
 | `businesses` | canonical business key; industry, geography, size, earnings and type; **optional** ask; **independent of any listing**, so an unlisted business can exist (owner-side, Stage 4) |
 | `listing_snapshots` | business FK (optional in future), source URL hash, facts, snapshot date, ask (EV), immutable version/hash, `independent_count` (`n_ind`) maintained transactionally |
 | `source_submissions` | submitting user, URL, exclusion check, review status, canonical match |
-| `invites` | buyer, operator listing, token, issued/opened/submitted timestamps |
+| `listing_invites` | buyer account, email, name, listing (business + snapshot), token hash, information level, caller request ID (unique), issued/expires/first and last opened/open count/submitted/revoked, email status |
+| `mail_outbox` | every outbound email with sign-in links redacted, delivery status, provider ID |
 | `forecast_submissions` | user, business, snapshot, value, confidence, kernel version, `information_level`, timestamp, blind eligibility, `counts_toward_independent`, frozen `F_before` reference and cap |
 | `aggregation_runs` | forecast set hash, prior parameters and multiple-table version, weights, mixture stats, `n_eff`, `n_ind` |
 | `score_contracts` | `F_before` snapshot, kernel parameters, `m_i`, `C(m_i)`, scoring-model version |
@@ -677,7 +702,8 @@ Serious financial intelligence tool with an accessible reward loop. Dark charcoa
 POST /search/interpret                 text -> editable structured filters
 GET  /value-opportunities              neutral fields + cap + independent count
 GET  /valuation-question/:id           frozen snapshot, eligibility, cap, count
-GET  /invites/:token                   operator-listing invite -> valuation question
+POST /api/invites                      bearer secret; buyer name + email + listing URL -> onboard listing, create account, email link
+GET  /invite/:token                     auto sign-in, then redirect to the listing's valuation form
 POST /forecasts                        amount + confidence; seal or reject if exposed
 GET  /forecasts/:id                     own data, current score, cap
 GET  /wallet                            one balance, event history, floor status
@@ -697,7 +723,9 @@ Any endpoint returning a crowd figure checks **(1)** source not removed, **(2)**
 ### 15.4 Event processing sequence
 
 ```text
-OPERATOR_INVITE (if any) -> OPEN_VALUATION_QUESTION
+VALUATION_REQUEST(name, email, listing URL) -> RESOLVE_OR_ONBOARD_LISTING -> ENSURE_ACCOUNT
+   -> CHECK_ELIGIBILITY -> EMAIL_LINK (or HOLD UNTIL LISTING APPROVED)
+INVITE_LINK_OPENED -> AUTO_SIGN_IN -> OPEN_VALUATION_QUESTION
 SOURCE_URL_SUBMITTED (if any)
    -> CHECK_EXCLUSION -> FETCH_FACTS -> CANONICALIZE -> APPROVE_SNAPSHOT
    -> SHOW_FORECAST_FORM (CAP + COUNT + IMPLIED MULTIPLE)
@@ -739,7 +767,7 @@ Required MVP protections:
 ### 17.1 Pilot setup
 
 - **Catalog:** every active operator (NBA/Synergy) listing on day one; third-party broker listings added through user submissions and operator curation once counsel signs off on 13.
-- **Cold start:** every buyer who signs the NDA on an operator listing receives an invite link to value that listing. Invites go out from the existing buyer-qualification flow. Buyers who inquired on several operator listings get one invite per listing. No operator-authored valuations, ever.
+- **Cold start:** every buyer who has had an operator listing's materials for 1 to 2 weeks receives an automated valuation request for that listing, sent by PriceAFirm when the buyer-qualification system posts the buyer's name, email and the listing URL. Buyers on several listings get one request per listing on one account. No operator-authored valuations, ever.
 - **Cohort:** 30–50 invited buyers, plus the inflow of inquiring buyers on operator listings. Run for months, not weeks; expect many listings with 0–2 valuations.
 
 ### 17.2 Measure what matters
@@ -784,7 +812,7 @@ Required MVP protections:
 ## 18. Failure cases and acceptance tests
 
 1. **New verified user:** Balance exactly `3`. Can reveal three listings with 3+ valuations, and any number of listings below 3 (rate-limited), without valuing anything.
-2. **Invited buyer:** NDA signed on an operator listing; invite link opens that listing's valuation form; no crowd figure shown before submission; forecast tagged `information_level = cim`; counts toward `n_ind`.
+2. **Invited buyer:** a request (name, email, listing URL) creates the account if needed and emails the link; opening it signs the buyer in with no other step and opens that listing's valuation form; no crowd figure shown before submission; forecast tagged `information_level = cim`; counts toward `n_ind`.
 3. **Nonvalued listing:** Appears in Value queue with cap ±10 and “Independent valuations on file: 0.” In Find Deals it appears with “No independent valuations yet,” ranked by fit, reveal free.
 4. **Low confidence selection:** Same possible score as Medium/High; wider assumed range displayed; broader kernel stored.
 5. **High confidence selection:** Same possible score; narrower range displayed; narrower kernel stored; a later report two Medium-widths away yields a larger loss than it would have under Medium.
@@ -810,6 +838,12 @@ Required MVP protections:
 25. **Percentile with too little evidence:** “Not enough evidence”; no public leaderboard.
 26. **Future asking-price change:** New snapshot with `n_ind = 0`; prior snapshot keeps its count and caps.
 27. **Economics undefined:** SDE ≠ EBITDA, unknowns shown; the ask is always EV, so `EV/ask` and `Pr(EV > ask)` are never suppressed for basis reasons.
+28. **New listing URL in a request:** the listing is onboarded before anything else; if extraction is complete it is approved and the email goes out; if not, the request is held, the listing appears in Admin > Review, and approval sends the email automatically.
+29. **Same buyer, several listings:** one account; one request and one link per listing; valuing one listing does not affect the others.
+30. **Repeat or retried message:** the same request ID returns the earlier result; a second message for an open request sends nothing unless it asks for a resend, which replaces the link.
+31. **Link opened by an email scanner first:** the buyer's later click still works until expiry.
+32. **Later sign-in:** the buyer can sign in with an email link at any time, or with a password after setting one in Account.
+33. **Already valued or exposed:** no email is sent and the caller is told why.
 
 ---
 
@@ -821,7 +855,7 @@ Register PriceAFirm.com. Build the multiple table from the operator's deal histo
 
 ### Stage 1 — Operator listings and the sparse-participation loop
 
-Verified accounts, 3-point grant, newcomer floor, operator catalog, invite links from the buyer-qualification flow, **Value businesses** queue with caps and counts, EV + confidence form with implied multiple, immutable snapshots, model prior, opinion pooling with transactional `n_ind`, post-submission view with figure, count and reveal. Scoring shadow-run.
+Verified accounts, 3-point grant, newcomer floor, operator catalog, automated valuation requests from the buyer-qualification system (API, URL onboarding, auto-created accounts, auto-login links, password option), **Value businesses** queue with caps and counts, EV + confidence form with implied multiple, immutable snapshots, model prior, opinion pooling with transactional `n_ind`, post-submission view with figure, count and reveal. Scoring shadow-run.
 
 ### Stage 2 — Find Deals and third-party ingestion
 
@@ -847,6 +881,7 @@ Unlisted businesses using the same `businesses` table with no ask (owner-side wo
 | Newcomer floor at −3 for first 5 forecasts | Prevents early users from going deeply negative while learning | Slight subsidy; one per real person |
 | Model prior blended with the ask | Reduces ask anchoring; works for businesses with no ask | Multiple table must be maintained; `w` is a hyperparameter |
 | Ask always treated as EV | Removes an unanswerable field and all basis-compatibility logic | Some asks are equity or asset prices; buyers absorb that in their estimate |
+| Automated valuation requests with auto-created accounts and auto-login links | Removes every signup step for the best-informed valuers | A forwarded email lets someone else value as that buyer for 30 days; mitigated by per-buyer links, revoke/resend, and one valuation per account |
 | Operator listings first, buyer invites after NDA, no house valuations | Immediate inventory and a natural stream of informed valuers | CIM-informed and listing-only valuers mix; tagged for analysis |
 | Permissionless third-party ingestion, removal on complaint | Inventory without a partner program | Legal exposure; mitigated by facts-only, attribution, prompt removal, counsel review |
 | Free reveals below 3 valuations, 1 point at 3+ | Price attaches to crowd-informed access; sparse listings stay usable | Fewer point sinks early; free tier must be rate-limited |

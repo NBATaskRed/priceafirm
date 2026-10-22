@@ -39,6 +39,9 @@ export function AppShell({ children, balance, email, admin }: { children: ReactN
               </summary>
               <div className="card absolute right-0 mt-2 w-56 p-2 text-sm shadow-xl">
                 <p className="truncate px-2 py-1 text-xs text-muted">{email}</p>
+                <Link href="/account" className="block rounded px-2 py-1.5 hover:bg-surface-2">
+                  Account and password
+                </Link>
                 <Link href="/terms" className="block rounded px-2 py-1.5 hover:bg-surface-2">
                   Terms
                 </Link>

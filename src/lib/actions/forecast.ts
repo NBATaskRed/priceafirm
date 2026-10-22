@@ -6,6 +6,7 @@ import { acceptTerms, hasAcceptedTerms, requireMember } from "@/lib/auth/session
 import { sealForecast } from "@/lib/quant/service";
 import { loadQuestion } from "@/lib/discovery/question";
 import { forecastRateLimited, parseMoney, str } from "./guards";
+import { inviteForSubmission, markInviteSubmitted } from "@/lib/invites/service";
 
 const schema = z.object({
   snapshotId: z.string().uuid(),
@@ -58,9 +59,13 @@ export async function submitForecastAction(formData: FormData): Promise<SubmitFo
     return { status: "rate_limited", message: "You have reached the limit of 20 valuations in 24 hours. Come back tomorrow." };
   }
 
+  // Buyers invited after receiving the CIM under the operator's NDA are tagged information_level = cim.
+  const invite = await inviteForSubmission(user.id, input.snapshotId);
+
   let result;
   try {
     result = await sealForecast({
+      informationLevel: invite?.information_level ?? "listing",
       userId: user.id,
       snapshotId: input.snapshotId,
       value: input.value,
@@ -74,6 +79,7 @@ export async function submitForecastAction(formData: FormData): Promise<SubmitFo
   }
 
   if (result.status === "sealed") {
+    if (invite) await markInviteSubmitted(invite.id);
     revalidatePath("/value");
     revalidatePath("/points");
     revalidatePath(`/value/${input.snapshotId}`);

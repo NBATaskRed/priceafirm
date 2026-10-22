@@ -1,6 +1,6 @@
 # Handoff: PriceAFirm build state (Oct 21, 2026)
 
-Spec of record: `docs/DESIGN_v2.2.md`. Working rules for agents: `CLAUDE.md`.
+Spec of record: `docs/DESIGN.md`. Working rules for agents: `CLAUDE.md`.
 
 ## Done and verified
 - **Schema** `supabase/migrations/0001_schema.sql` (single consolidated v2.2 file). Verified on Postgres 16:
@@ -26,6 +26,16 @@ Spec of record: `docs/DESIGN_v2.2.md`. Working rules for agents: `CLAUDE.md`.
 - **Vercel** project `priceafirm` (prj_03QUn7VjLqFo4nlXDshN4SyMUrKU, team next-bridge-advisors), Node 24.
   Env already set: SESSION_SECRET, CRON_SECRET, ADMIN_EMAILS, INVITE_ONLY=1, SCORING_MODE=shadow, APP_URL.
 
+## Automated valuation requests (added Oct 22, design v2.3 Section 13)
+- `POST /api/invites` (bearer INVITE_API_SECRET, already set in Vercel): buyer name, email, listing URL ->
+  onboard URL if new (held for Admin > Review when facts are incomplete; approval sends held emails) ->
+  create/reuse account -> eligibility -> email with `/invite/<token>` link. Contract: `docs/INVITE_API.md`.
+- `/invite/<token>`: 30-day reusable auto-login (generateLink + verifyOtp server-side), lands on
+  `/value/<snapshot>?welcome=1`. Forecasts from invited buyers are tagged `cim` and mark the invite submitted.
+- Sign-in page: email link or password; `/account` sets a password. Admin > Invites: manual send, request log
+  with resend/revoke, outbox. Admin > Review: edit facts.
+- Not verified against a live Supabase yet (no project). First live test: call the API with your own email.
+
 ## Remaining, in order
 1. **Supabase project** (needs the owner): create `priceafirm`, then from a machine with the Supabase CLI:
    `supabase link --project-ref <ref>` -> `supabase db push` -> run `supabase/seed.sql` in the SQL editor.
@@ -34,10 +44,9 @@ Spec of record: `docs/DESIGN_v2.2.md`. Working rules for agents: `CLAUDE.md`.
    (production + preview).
 2. **Vercel <-> GitHub**: connect the project to the repo, deploy, then sign in with an ADMIN_EMAILS address
    and walk the Section 18 acceptance list on the live site.
-3. **Operator invites** (Stage 1, not built): `/invite/[token]` route that reads `listing_invites`, signs
-   the buyer in (or prompts), and opens the valuation form with `information_level = cim`; admin form to
-   issue invites per (buyer email, listing); an API endpoint (bearer INVITE_API_SECRET) so the NBA
-   buyer-qualification flow (Make.com) can create invites after NDA.
+3. **Email**: Resend account + verified sending domain, then RESEND_API_KEY and MAIL_FROM in Vercel. In
+   Supabase Auth set custom SMTP (Resend) so email sign-in links are not limited to the default 2/hour.
+   Point the buyer-qualification system (Make.com HTTP module) at `/api/invites` per `docs/INVITE_API.md`.
 4. **Operator catalog**: load the real NBA/Synergy listings (replace the 5 fictional seed rows). An admin
    "Add operator listing" form or a CSV import is the fastest route.
 5. **Multiple table**: replace `MULTIPLE_TABLE` in `src/lib/quant/model.ts` with Ashish's deal-history

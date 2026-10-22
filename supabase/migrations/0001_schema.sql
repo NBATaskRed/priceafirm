@@ -37,6 +37,7 @@ create table profiles (
   accepted_terms_at timestamptz,
   buyer_profile jsonb not null default '{}'::jsonb,
   first5_floor_clipped numeric not null default 0, -- newcomer floor bookkeeping
+  password_set boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -113,7 +114,7 @@ create index on listing_sources (source_url_hash);
 
 create table source_submissions (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references profiles(id),
+  user_id uuid references profiles(id),        -- null = onboarded by the system (invite API)
   submitted_url text not null,
   normalized_url text,
   domain text,
@@ -256,14 +257,42 @@ create table admin_audit (
 
 -- Operator-listing invites (buyer x listing after NDA)
 create table listing_invites (
-  token text primary key,
+  id uuid primary key default gen_random_uuid(),
+  token_hash text not null unique,            -- sha256 of the emailed token; the raw token is never stored
   snapshot_id uuid not null references listing_snapshots(id) on delete cascade,
+  business_id uuid not null references businesses(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
   buyer_email text not null,
+  buyer_name text,
   information_level text not null default 'cim' check (information_level in ('listing','cim')),
+  request_id text unique,                     -- caller's idempotency key
   issued_at timestamptz not null default now(),
-  opened_at timestamptz,
+  expires_at timestamptz not null,
+  first_opened_at timestamptz,
+  last_opened_at timestamptz,
+  open_count int not null default 0,
   submitted_at timestamptz,
+  revoked_at timestamptz,
+  email_status text not null default 'pending' check (email_status in ('pending','sent','captured','failed')),
+  email_error text,
   created_by uuid references profiles(id)
+);
+create index on listing_invites (user_id, snapshot_id);
+
+-- Every outbound email is recorded; sent through Resend when configured, otherwise captured here.
+create table mail_outbox (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null,
+  to_email text not null,
+  subject text not null,
+  text_body text not null,
+  html_body text not null,
+  status text not null default 'pending' check (status in ('pending','sent','captured','failed')),
+  provider_id text,
+  error text,
+  related_invite uuid references listing_invites(id) on delete set null,
+  created_at timestamptz not null default now(),
+  sent_at timestamptz
 );
 
 -- ---------------------------------------------------------------------------
@@ -335,6 +364,7 @@ create policy "profiles: self update" on profiles for update using (auth.uid() =
 create policy "snapshots: approved readable" on listing_snapshots for select using (status = 'approved');
 create policy "domains: readable" on source_domains for select using (true);
 alter table listing_invites enable row level security;
+alter table mail_outbox enable row level security;
 create policy "forecasts: self read" on forecast_submissions for select using (auth.uid() = user_id);
 create policy "evaluations: self read" on score_evaluations for select
   using (exists (select 1 from forecast_submissions f where f.id = forecast_id and f.user_id = auth.uid()));

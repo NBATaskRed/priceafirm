@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ListingSnapshot, SourceDomain } from "@/lib/domain/types";
 import { CONFIDENCE_LABEL, Card, EmptyState, Money, PageHeader, Points, fmtDate, locationText } from "@/components/ui";
-import { ActionButton, AddDomainForm, AddInviteForm, RecomputeButton, SourceRow, VoidForecastButton } from "./AdminControls";
+import { ActionButton, AddDomainForm, AddInviteForm, EditFactsForm, InviteRowActions, IssueInviteForm, RecomputeButton, SourceRow, VoidForecastButton } from "./AdminControls";
 
 export const metadata = { title: "Admin" };
 
@@ -106,6 +106,9 @@ async function ReviewTab() {
   const { data: pr } = submitters.length ? await admin.from("profiles").select("id,email").in("id", submitters) : { data: [] };
   const emails = new Map<string, string>();
   for (const p of (pr ?? []) as Array<{ id: string; email: string }>) emails.set(p.id, p.email);
+  const { data: heldRows } = await admin.from("listing_invites").select("snapshot_id").in("snapshot_id", ids).eq("email_status", "pending").is("revoked_at", null);
+  const held = new Map<string, number>();
+  for (const h of (heldRows ?? []) as Array<{ snapshot_id: string }>) held.set(h.snapshot_id, (held.get(h.snapshot_id) ?? 0) + 1);
 
   return (
     <ul className="space-y-4">
@@ -150,6 +153,11 @@ async function ReviewTab() {
                 <dd>{s.industry_tags.join(", ") || "none"}</dd>
               </div>
             </dl>
+            {held.get(s.id) ? <p className="mt-3 text-sm text-accent">{held.get(s.id)} valuation request(s) waiting for this listing; they are emailed when you approve.</p> : null}
+            <EditFactsForm
+              snapshotId={s.id}
+              initial={{ headline: s.headline, industry: s.industry, industry_tags: s.industry_tags, state: s.state, metro: s.metro, asking_price: s.asking_price, revenue: s.revenue, earnings: s.earnings, earnings_type: s.earnings_type }}
+            />
             {source ? (
               <p className="mt-3 break-all text-xs text-muted">
                 {source.listing_title_raw ? <span className="block text-text/80">Raw title: {source.listing_title_raw}</span> : null}
@@ -176,8 +184,84 @@ async function InvitesTab() {
   const profiles = (pr ?? []) as Array<{ email: string; invited: boolean; created_at: string; trust_status: string }>;
   const invitedSet = new Set(invites.map((i) => i.email));
   const waiting = profiles.filter((p) => !p.invited);
+  const { data: li } = await admin
+    .from("listing_invites")
+    .select("id,buyer_name,buyer_email,information_level,issued_at,expires_at,first_opened_at,open_count,submitted_at,revoked_at,email_status,email_error,snapshot_id,listing_snapshots(headline,metro,state,status)")
+    .order("issued_at", { ascending: false })
+    .limit(100);
+  type Req = {
+    id: string; buyer_name: string | null; buyer_email: string; information_level: string; issued_at: string; expires_at: string;
+    first_opened_at: string | null; open_count: number; submitted_at: string | null; revoked_at: string | null; email_status: string; email_error: string | null;
+    snapshot_id: string; listing_snapshots: { headline: string; metro: string | null; state: string | null; status: string } | null;
+  };
+  const requests = (li ?? []) as unknown as Req[];
+  const { data: ob } = await admin.from("mail_outbox").select("id,to_email,subject,status,created_at,text_body").order("created_at", { ascending: false }).limit(20);
+  const outbox = (ob ?? []) as Array<{ id: string; to_email: string; subject: string; status: string; created_at: string; text_body: string }>;
+  const stateOf = (r: Req) =>
+    r.revoked_at ? "revoked" : r.submitted_at ? "valued" : r.email_status === "pending" ? "held for listing review" : new Date(r.expires_at) < new Date() ? "expired" : r.first_opened_at ? `opened ${r.open_count}x` : `email ${r.email_status}`;
   return (
     <div className="space-y-6">
+      <Card>
+        <h2 className="text-base font-semibold">Send a valuation request</h2>
+        <p className="mt-1 text-sm text-muted">
+          Same as the invite API: creates the buyer&apos;s account if needed, onboards the listing URL if it is new, and emails a link that signs them in and opens the
+          valuation form. Usually sent automatically by the buyer-qualification system after 1 to 2 weeks with materials.
+        </p>
+        <IssueInviteForm />
+      </Card>
+      <div className="card overflow-x-auto">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Buyer</th>
+              <th>Listing</th>
+              <th>Status</th>
+              <th>Issued</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.map((r) => (
+              <tr key={r.id}>
+                <td>
+                  <span className="font-medium">{r.buyer_name ?? r.buyer_email}</span>
+                  <span className="block text-xs text-muted">{r.buyer_email} · {r.information_level}</span>
+                </td>
+                <td className="text-muted">{r.listing_snapshots ? `${r.listing_snapshots.headline}${r.listing_snapshots.state ? `, ${r.listing_snapshots.state}` : ""}` : r.snapshot_id}</td>
+                <td>
+                  {stateOf(r)}
+                  {r.email_error ? <span className="block text-xs text-neg">{r.email_error}</span> : null}
+                </td>
+                <td className="figures text-muted">{fmtDate(r.issued_at)}</td>
+                <td>{r.submitted_at || r.revoked_at ? null : <InviteRowActions inviteId={r.id} canResend={r.listing_snapshots?.status === "approved"} />}</td>
+              </tr>
+            ))}
+            {requests.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-muted">No valuation requests yet.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+      {outbox.length ? (
+        <Card>
+          <h2 className="text-base font-semibold">Recent emails (outbox)</h2>
+          <p className="mt-1 text-sm text-muted">&quot;captured&quot; means sending is not configured yet (no RESEND_API_KEY / MAIL_FROM, or MAIL_CAPTURE=1); the email was recorded but not delivered.</p>
+          <ul className="mt-2 divide-y divide-border text-sm">
+            {outbox.map((m) => (
+              <li key={m.id} className="py-2">
+                <details>
+                  <summary className="cursor-pointer">
+                    {m.to_email} · {m.subject} · <span className="text-muted">{m.status} {fmtDate(m.created_at)}</span>
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap text-xs text-muted">{m.text_body}</pre>
+                </details>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       <Card>
         <h2 className="text-base font-semibold">Invite emails</h2>
         <p className="mt-1 text-sm text-muted">Adding an email lets that person past the waitlist. Existing accounts are flipped immediately.</p>

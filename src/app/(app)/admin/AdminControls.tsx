@@ -13,6 +13,10 @@ import {
   setSourceTypeAction,
   updateSourceAction,
   voidForecastAction,
+  issueInviteAction,
+  resendInviteAction,
+  revokeInviteAction,
+  updateSnapshotFactsAction,
   type AdminResult,
 } from "@/lib/actions/admin";
 import type { SourceDomain } from "@/lib/domain/types";
@@ -307,5 +311,121 @@ export function RecomputeButton() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+
+export function IssueInviteForm() {
+  const { pending, result, call } = useAdminCall();
+  const ref = useRef<HTMLFormElement>(null);
+  return (
+    <form
+      ref={ref}
+      className="mt-3 grid gap-3 sm:grid-cols-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        call(() => issueInviteAction(fd));
+      }}
+    >
+      <label className="block">
+        <span className="label">Buyer name</span>
+        <input name="buyer_name" className="input" required />
+      </label>
+      <label className="block">
+        <span className="label">Buyer email</span>
+        <input name="buyer_email" type="email" className="input" required />
+      </label>
+      <label className="block sm:col-span-2">
+        <span className="label">Listing URL</span>
+        <input name="listing_url" type="url" className="input" required placeholder="https://www.synergybb.com/listings/..." />
+      </label>
+      <label className="block">
+        <span className="label">Buyer has</span>
+        <select name="information_level" className="input" defaultValue="cim">
+          <option value="cim">CIM / materials (after NDA)</option>
+          <option value="listing">Public listing only</option>
+        </select>
+      </label>
+      <label className="flex items-center gap-2 self-end text-sm">
+        <input type="checkbox" name="resend" /> Resend if an open invite exists
+      </label>
+      <div className="sm:col-span-2">
+        <Button type="submit" disabled={pending}>
+          {pending ? "Sending" : "Send valuation request"}
+        </Button>
+        <ResultLine result={result} />
+      </div>
+    </form>
+  );
+}
+
+export function InviteRowActions({ inviteId, canResend }: { inviteId: string; canResend: boolean }) {
+  const { pending, result, call } = useAdminCall();
+  return (
+    <div className="flex flex-wrap gap-2">
+      {canResend ? (
+        <Button size="sm" variant="secondary" disabled={pending} onClick={() => call(() => resendInviteAction(inviteId))}>
+          Resend
+        </Button>
+      ) : null}
+      <Button size="sm" variant="ghost" disabled={pending} onClick={() => call(() => revokeInviteAction(inviteId))}>
+        Revoke link
+      </Button>
+      <ResultLine result={result} />
+    </div>
+  );
+}
+
+export function EditFactsForm({
+  snapshotId,
+  initial,
+}: {
+  snapshotId: string;
+  initial: { headline: string; industry: string; industry_tags: string[]; state: string | null; metro: string | null; asking_price: number | null; revenue: number | null; earnings: number | null; earnings_type: string };
+}) {
+  const { pending, result, call } = useAdminCall();
+  const field = (name: string, label: string, value: string | number | null, extra = "") => (
+    <label className={`block ${extra}`}>
+      <span className="label">{label}</span>
+      <input name={name} className="input" defaultValue={value ?? ""} />
+    </label>
+  );
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-sm text-muted hover:text-text">Edit facts</summary>
+      <form
+        className="mt-3 grid gap-3 sm:grid-cols-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const fd = new FormData(e.currentTarget);
+          call(() => updateSnapshotFactsAction(snapshotId, fd));
+        }}
+      >
+        {field("headline", "Headline (neutral, no names)", initial.headline, "sm:col-span-2")}
+        {field("industry", "Industry", initial.industry, "sm:col-span-2")}
+        {field("industry_tags", "Tags (comma separated)", initial.industry_tags.join(", "), "sm:col-span-2")}
+        {field("state", "State (2 letters)", initial.state)}
+        {field("metro", "Metro", initial.metro)}
+        {field("asking_price", "Ask (EV, $)", initial.asking_price)}
+        {field("revenue", "Revenue ($)", initial.revenue)}
+        {field("earnings", "Earnings ($)", initial.earnings)}
+        <label className="block">
+          <span className="label">Earnings type</span>
+          <select name="earnings_type" className="input" defaultValue={initial.earnings_type}>
+            <option value="sde">SDE</option>
+            <option value="ebitda">EBITDA</option>
+            <option value="seller_cash_flow">Seller cash flow</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <div className="sm:col-span-4">
+          <Button type="submit" size="sm" disabled={pending}>
+            {pending ? "Saving" : "Save facts"}
+          </Button>
+          <ResultLine result={result} />
+        </div>
+      </form>
+    </details>
   );
 }

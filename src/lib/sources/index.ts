@@ -99,7 +99,8 @@ export type ValidationResult =
 const EMPTY_FACTS: ExtractedFacts = { fields: {}, quality: "low" };
 
 async function logSubmission(row: {
-  user_id: string;
+  /** null when the system (invite API) onboarded the listing. */
+  user_id: string | null;
   submitted_url: string;
   normalized_url?: string | null;
   domain?: string | null;
@@ -218,7 +219,10 @@ export interface SubmissionFacts {
 }
 
 export interface CreateSnapshotInput {
-  userId: string;
+  /** null when the system (invite API) onboarded the listing. */
+  userId: string | null;
+  /** Hold for admin review unless extraction found an ask plus earnings or revenue (system onboarding). */
+  requireCompleteFacts?: boolean;
   url: string;
   domain: string;
   canonicalKey: string;
@@ -309,7 +313,8 @@ export async function createSnapshotFromSubmission(input: CreateSnapshotInput): 
   // fetch is the only path that waits for review.
   const manualEntry = Boolean(input.fetchError) || extracted == null;
   const live = (source.source_type === "operator" || source.source_type === "third_party") && !source.removed_at;
-  const status: "approved" | "pending_review" = live && !manualEntry ? "approved" : "pending_review";
+  const incomplete = Boolean(input.requireCompleteFacts) && (extracted?.quality !== "high" || !facts.industry);
+  const status: "approved" | "pending_review" = live && !manualEntry && !incomplete ? "approved" : "pending_review";
 
   const snapInsert = await db
     .from("listing_snapshots")
@@ -365,10 +370,79 @@ export async function createSnapshotFromSubmission(input: CreateSnapshotInput): 
     normalized_url: url,
     domain,
     status,
-    reason: status === "approved" ? null : manualEntry ? "manual_entry_after_fetch_failure" : "source_not_live",
+    reason: status === "approved" ? null : manualEntry ? "manual_entry_after_fetch_failure" : incomplete ? "incomplete_facts" : "source_not_live",
     business_id: businessId,
     snapshot_id: snapshotId,
   });
 
   return { status, businessId, snapshotId };
+}
+
+
+export type OnboardResult =
+  | { status: "invalid"; message: string }
+  | { status: "blocked"; message: string }
+  | { status: "existing" | "created"; businessId: string; snapshotId: string; approved: boolean; snapshot: ListingSnapshot | null; message: string };
+
+/**
+ * System onboarding for the invite API: resolve a listing URL to a canonical business/snapshot, creating it
+ * from the public page if it is new. Excluded sources are rejected before any fetch. A new listing is
+ * approved only when extraction found an ask plus earnings or revenue; otherwise it waits for an admin to
+ * complete the facts (invites for it are held until then).
+ */
+export async function onboardListingUrl(raw: string): Promise<OnboardResult> {
+  const norm = normalizeUrl(raw);
+  if (!norm.ok) return { status: "invalid", message: norm.reason };
+  const { url, domain, canonicalKey } = norm;
+  const submittedUrl = raw.trim().slice(0, 2048);
+  if (isBlockedDomain(domain)) {
+    await logSubmission({ user_id: null, submitted_url: submittedUrl, normalized_url: url, domain, status: "rejected", reason: "blocked_domain" });
+    return { status: "blocked", message: BLOCKED_MESSAGE };
+  }
+  const check = await checkSource(domain);
+  if (check.status !== "allowed") return { status: "blocked", message: check.message };
+
+  const existingBusinessId = await findExistingBusiness(urlHash(url), canonicalKey);
+  if (existingBusinessId) {
+    const snapshot = await latestSnapshot(existingBusinessId);
+    if (snapshot) {
+      return { status: "existing", businessId: existingBusinessId, snapshotId: snapshot.id, approved: snapshot.status === "approved", snapshot, message: "Listing already on PriceAFirm." };
+    }
+  }
+
+  await ensureSourceRow(domain, check.source);
+  const fetched = await safeFetch(url, domain);
+  const extracted = fetched.ok ? extractListingFacts(fetched.html, fetched.finalUrl) : null;
+  const industry = extracted?.industry ?? null;
+  const created = await createSnapshotFromSubmission({
+    userId: null,
+    url,
+    domain,
+    canonicalKey,
+    requireCompleteFacts: true,
+    extracted,
+    fetchError: fetched.ok ? null : fetched.reason,
+    listingTitleRaw: extracted?.title ?? null,
+    facts: {
+      headline: industry ? industry.charAt(0).toUpperCase() + industry.slice(1) : "Business for sale",
+      industry: industry ?? "unknown",
+      state: extracted?.state ?? null,
+      metro: extracted?.metro ?? null,
+      askingPrice: extracted?.askingPrice ?? null,
+      revenue: extracted?.revenue ?? null,
+      earnings: extracted?.earnings ?? null,
+      earningsType: extracted?.earningsType ?? "unknown",
+      includesInventory: extracted?.includesInventory ?? null,
+      includesRealEstate: extracted?.includesRealEstate ?? null,
+    },
+  });
+  const snapshot = await latestSnapshot(created.businessId);
+  return {
+    status: created.status === "duplicate" ? "existing" : "created",
+    businessId: created.businessId,
+    snapshotId: created.snapshotId,
+    approved: created.status === "approved" || snapshot?.status === "approved",
+    snapshot,
+    message: created.status === "pending_review" ? "Listing onboarded; facts need admin review before buyers can value it." : "Listing onboarded.",
+  };
 }

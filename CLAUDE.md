@@ -1,7 +1,7 @@
 # PriceAFirm
 
 Crowd valuation and deal-discovery network for businesses listed for sale. Owner: Ashish Bhatt
-(Next Bridge Advisors). Spec of record: `docs/DESIGN_v2.2.md`. Current state and next work: `docs/HANDOFF.md`.
+(Next Bridge Advisors). Spec of record: `docs/DESIGN.md`. Current state and next work: `docs/HANDOFF.md`.
 Read both before changing behaviour.
 
 ## Stack
@@ -21,6 +21,7 @@ Supabase (Postgres + magic-link auth), Node 24. Same stack as fundstamp.com.
 - `src/lib/sources/` URL normalize, excluded-source check, SSRF-safe fetch, facts-only extraction.
 - `src/lib/search/` natural-language search -> filter chips -> deterministic filters.
 - `src/lib/actions/` server actions; `src/lib/auth/session.ts` gating; `src/app/` screens.
+- `src/lib/invites/` valuation requests (API `POST /api/invites`, contract in `docs/INVITE_API.md`), auto-login route `src/app/invite/[token]`; `src/lib/mail/` templates + Resend/outbox sender.
 
 ## Invariants (do not break)
 - Money paths live in SQL RPCs (`reveal_url`, `submit_forecast`, `post_score_change`, `void_forecast`, `remove_source`). Never move charging or counting into app code.
@@ -29,6 +30,7 @@ Supabase (Postgres + magic-link auth), Node 24. Same stack as fundstamp.com.
 - Find Deals writes a `find_deals_row` exposure for every row BEFORE returning it. Value Businesses never shows or orders by crowd figures.
 - Cap is `10/sqrt(1+n_eff_before)`, identical across confidence. Scoring parameters d0=2.0, zRef=1.5 keep honest confidence optimal; the test "honest confidence maximizes expected score" must pass after any parameter change.
 - Ask is always EV. No ask-basis field. BizBuySell/BizQuest are excluded before any fetch.
+- Invite tokens are stored only as sha256 hashes; the outbox stores emails with sign-in links redacted. Listings in requests are identified by URL and onboarded first when new.
 - Crowd numbers are "model-derived, not offers". Scores are "peer-predictive", never "accuracy".
 
 ## Conventions

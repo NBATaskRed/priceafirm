@@ -7,6 +7,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { recomputeSnapshot, refreshAggregate } from "@/lib/quant/service";
 import { isBlockedDomain, registrableDomain } from "@/lib/sources/normalize";
 import { recomputeEverything } from "./recompute-core";
+import { issueInvite, sendHeldInvites, sendInviteEmail } from "@/lib/invites/service";
+import { inviteRequestSchema } from "@/lib/invites/token";
 import { str } from "./guards";
 
 export type AdminResult = { status: "ok"; message: string } | { status: "error"; message: string };
@@ -134,6 +136,13 @@ export async function reviewSnapshotAction(snapshotId: string, decision: "approv
     } catch (err) {
       console.error("refreshAggregate failed", err);
     }
+    // Valuation requests that were waiting for this listing go out now.
+    try {
+      const sent = await sendHeldInvites(snapshotId);
+      if (sent) await audit(user.id, "invites.released", snapshotId, { count: sent });
+    } catch (err) {
+      console.error("sendHeldInvites failed", err);
+    }
   } else {
     const { error } = await admin.from("listing_snapshots").update({ status: "withdrawn" }).eq("id", snapshotId);
     if (error) return { status: "error", message: error.message };
@@ -221,4 +230,114 @@ export async function voidForecastAction(forecastId: string, reason: string): Pr
   revalidatePath("/value");
   revalidatePath("/points");
   return { status: "ok", message: "Forecast voided and the listing re-scored." };
+}
+
+
+/* ---------------------------------------------------------------- Listing facts (review) */
+
+const factsSchema = z.object({
+  headline: z.string().trim().min(2).max(120),
+  industry: z.string().trim().min(2).max(80),
+  industry_tags: z.string().max(300),
+  state: z.string().trim().max(2),
+  metro: z.string().trim().max(80),
+  asking_price: z.number().positive().nullable(),
+  revenue: z.number().positive().nullable(),
+  earnings: z.number().positive().nullable(),
+  earnings_type: z.enum(["sde", "ebitda", "seller_cash_flow", "unknown"]),
+});
+
+function moneyOrNull(v: string): number | null {
+  const n = Number(v.replace(/[$,\s]/g, ""));
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/** Correct a pending listing's neutral facts before approval (only pending_review snapshots are editable). */
+export async function updateSnapshotFactsAction(snapshotId: string, formData: FormData): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  if (!z.string().uuid().safeParse(snapshotId).success) return { status: "error", message: "Invalid snapshot." };
+  const parsed = factsSchema.safeParse({
+    headline: str(formData, "headline"),
+    industry: str(formData, "industry"),
+    industry_tags: str(formData, "industry_tags"),
+    state: str(formData, "state").toUpperCase(),
+    metro: str(formData, "metro"),
+    asking_price: moneyOrNull(str(formData, "asking_price")),
+    revenue: moneyOrNull(str(formData, "revenue")),
+    earnings: moneyOrNull(str(formData, "earnings")),
+    earnings_type: str(formData, "earnings_type") || "unknown",
+  });
+  if (!parsed.success) return { status: "error", message: "Check the fields: headline and industry are required; money fields are whole dollars." };
+  const f = parsed.data;
+  const admin = supabaseAdmin();
+  const { data: snap } = await admin.from("listing_snapshots").select("status").eq("id", snapshotId).maybeSingle();
+  if (!snap) return { status: "error", message: "Snapshot not found." };
+  if (snap.status !== "pending_review") return { status: "error", message: "Only listings awaiting review can be edited. Approved snapshots are frozen; create a new version instead." };
+  const { regionForState } = await import("@/lib/sources/usStates");
+  const { error } = await admin
+    .from("listing_snapshots")
+    .update({
+      headline: f.headline,
+      industry: f.industry,
+      industry_tags: f.industry_tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean),
+      state: f.state || null,
+      region: f.state ? regionForState(f.state) : null,
+      metro: f.metro || null,
+      asking_price: f.asking_price,
+      revenue: f.revenue,
+      earnings: f.earnings,
+      earnings_type: f.earnings == null ? "unknown" : f.earnings_type,
+    })
+    .eq("id", snapshotId);
+  if (error) return { status: "error", message: error.message };
+  await audit(user.id, "snapshot.edit_facts", snapshotId, f);
+  revalidatePath("/admin");
+  return { status: "ok", message: "Facts saved. Approve to publish and send any held valuation requests." };
+}
+
+/* ---------------------------------------------------------------- Valuation requests (invites) */
+
+export async function issueInviteAction(formData: FormData): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  const parsed = inviteRequestSchema.safeParse({
+    buyer_name: str(formData, "buyer_name"),
+    buyer_email: str(formData, "buyer_email"),
+    listing_url: str(formData, "listing_url"),
+    information_level: str(formData, "information_level") || "cim",
+    resend: str(formData, "resend") === "on",
+  });
+  if (!parsed.success) return { status: "error", message: "Enter the buyer's name, a valid email and the listing URL." };
+  const r = parsed.data;
+  try {
+    const res = await issueInvite({ buyerName: r.buyer_name, buyerEmail: r.buyer_email, listingUrl: r.listing_url, informationLevel: r.information_level, resend: r.resend, createdBy: user.id });
+    await audit(user.id, "invite.issue", r.buyer_email, { listing_url: r.listing_url, result: res.status });
+    revalidatePath("/admin");
+    const ok = res.status === "sent" || res.status === "captured" || res.status === "held" || res.status === "already_invited";
+    return { status: ok ? "ok" : "error", message: `${res.status}: ${res.message}` };
+  } catch (e) {
+    console.error("issueInviteAction failed", e);
+    return { status: "error", message: "Could not issue the invite. Check the logs." };
+  }
+}
+
+export async function resendInviteAction(inviteId: string): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  if (!z.string().uuid().safeParse(inviteId).success) return { status: "error", message: "Invalid invite." };
+  try {
+    const res = await sendInviteEmail(inviteId);
+    await audit(user.id, "invite.resend", inviteId, { result: res.status });
+    revalidatePath("/admin");
+    return res.status === "failed" ? { status: "error", message: res.error ?? "Email failed." } : { status: "ok", message: res.status === "sent" ? "Sent with a fresh link." : "Captured in the outbox (sending not configured)." };
+  } catch (e) {
+    return { status: "error", message: e instanceof Error ? e.message : "Could not resend." };
+  }
+}
+
+export async function revokeInviteAction(inviteId: string): Promise<AdminResult> {
+  const { user } = await requireAdmin();
+  if (!z.string().uuid().safeParse(inviteId).success) return { status: "error", message: "Invalid invite." };
+  await supabaseAdmin().from("listing_invites").update({ revoked_at: new Date().toISOString() }).eq("id", inviteId);
+  await audit(user.id, "invite.revoke", inviteId, null);
+  revalidatePath("/admin");
+  return { status: "ok", message: "Link revoked." };
 }

@@ -15,6 +15,7 @@ export interface Profile {
   buyer_profile: Record<string, unknown>;
   /** Cumulative amount clipped by the newcomer floor over the first 5 scored forecasts. */
   first5_floor_clipped: number;
+  password_set: boolean;
 }
 
 /** Neutral, non-identifying listing facts. Safe to show in the Value queue. */
