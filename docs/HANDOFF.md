@@ -67,3 +67,18 @@ Spec of record: `docs/DESIGN.md`. Working rules for agents: `CLAUDE.md`.
   fix the form to show possible score +/-5.8 (2 prior valuations) and the reveal as 1 point (count 3 includes
   the buyer; owner chose NOT to exclude own valuation).
 - Docs to update: design doc Section 6.3 (new scoring rule).
+
+## UI and UX: design is being finished separately (do not diverge)
+- The visual and interaction design is being finished on a Claude Design canvas ("PriceAFirm UX"), outside
+  this repo. When it is final, it arrives here as `docs/UX_SPEC.md` (tokens, screens, copy) and becomes the
+  source of truth for look and feel.
+- Until then: do NOT restyle, re-layout or rewrite user-facing copy on any screen, and do not add new screens'
+  visual treatments. Functional fixes (bugs, data, validation, accessibility defects) are fine; keep the
+  existing components and classes.
+- New behaviour that needs UI: add it with the existing components and minimal styling, and list it under
+  "UI added pending design" in docs/HANDOFF.md so the design pass can cover it.
+- Product rules the design already assumes (keep them): one EV number plus Low/Medium/High; possible score
+  is one +/- range for all three levels; the assumed range per confidence is shown; live implied multiple;
+  "Independent valuations on file: N" on neutral screens and "Based on N independent valuations" next to
+  every crowd figure; reveal free below 3 valuations, 1 point at 3+ (the buyer's own valuation counts);
+  Find Deals rows are identifiable and exposed on render, behind a once-per-session gate.
