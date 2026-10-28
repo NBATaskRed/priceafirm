@@ -22,7 +22,7 @@ export function ThemeToggle({ initial, compact = false }: { initial: Theme; comp
       role="radio"
       aria-checked={theme === t}
       onClick={() => pick(t)}
-      className={`flex-1 rounded-[9px] px-3 ${compact ? "py-1 text-xs" : "py-2 text-sm"} font-semibold ${theme === t ? "bg-invert-bg text-invert-ink" : "text-text hover:bg-surface-2"}`}
+      className={`flex-1 rounded-[9px] px-3 ${compact ? "min-h-[44px] text-xs" : "min-h-[44px] text-sm"} font-semibold ${theme === t ? "bg-invert-bg text-invert-ink" : "text-text hover:bg-surface-2"}`}
     >
       {label}
     </button>

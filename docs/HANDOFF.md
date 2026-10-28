@@ -93,3 +93,11 @@ Spec of record: `docs/DESIGN.md`. Working rules for agents: `CLAUDE.md`.
   "Independent valuations on file: N" on neutral screens and "Based on N independent valuations" next to
   every crowd figure; reveal free below 3 valuations, 1 point at 3+ (the buyer's own valuation counts);
   Find Deals rows are identifiable and exposed on render, behind a once-per-session gate.
+
+## Status Oct 28 (paused)
+- UX spec v1.1 APPROVED (light default, dark option; Hanken Grotesk + Archivo wide; wording and valuation form approved).
+- All screens and the valuation request email restyled to the spec (commit 32f5b09); tsc, lint, 83 tests, build green.
+- Not yet checked by eye in a browser (needs a live Supabase to sign in). First task on resume: screenshot every screen
+  in light and dark and fix visual issues against docs/UX_SPEC.md and the "PriceAFirm UX" canvas.
+- Known small deviations kept on purpose: no confidence level preselected; private note, valuation assumptions,
+  Find deals valuation-count filter and example searches, and the My points valuations list are kept, styled quietly.
