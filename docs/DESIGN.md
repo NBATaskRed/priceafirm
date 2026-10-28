@@ -2,7 +2,7 @@
 
 > Repo copy of the spec of record (Project doc `claude/PriceAFirm_Product_Design_v2.2.md`, now at v2.3). Keep both in sync.
 
-**Version:** 2.3 (October 22, 2026: automated buyer valuation requests with auto-created accounts and auto-login links; listings identified by URL and onboarded on first request; password or email-link sign-in. Builds on 2.2, revised per Ashish's decisions of October 21, 2026: operator listings and buyer invites for cold start; permissionless third-party ingestion with removal on complaint; model prior; incentive-compatible confidence scoring; URL reveals free below 3 valuations; simplified Find Deals; ask always treated as EV; newcomer loss floor; owner-side-ready schema)  
+**Version:** 2.3 (October 22, 2026, scoring revised October 28 to the quadratic proper score: automated buyer valuation requests with auto-created accounts and auto-login links; listings identified by URL and onboarded on first request; password or email-link sign-in. Builds on 2.2, revised per Ashish's decisions of October 21, 2026: operator listings and buyer invites for cold start; permissionless third-party ingestion with removal on complaint; model prior; incentive-compatible confidence scoring; URL reveals free below 3 valuations; simplified Find Deals; ask always treated as EV; newcomer loss floor; owner-side-ready schema)  
 **Date:** October 22, 2026  
 **Status:** Build specification for an invited-user pilot, with explicitly flagged experimental scoring and statistical assumptions  
 **Website:** PriceAFirm.com (domain available; register it; trademark clearance not established)
@@ -236,37 +236,43 @@ The cap is **immutable for that entry**. If another qualifying valuation arrives
 
 **Newcomer floor:** across an account's first 5 scored forecasts, the cumulative posted score is floored at −3. Implementation: scores are computed normally; when posting ledger deltas for forecasts in the first-5 set, the system clips the running sum of their posted scores at −3, and later positive revisions first restore the clipped amount. The floor is per account for life, applies once, and is disclosed on signup.
 
-### 6.3 Scoring rule
+### 6.3 Scoring rule (v2.3: quadratic proper score, exactly incentive-compatible)
 
-At the moment participant `i` submits, snapshot:
+At the moment participant `i` submits, freeze:
 
 - `F_before_i`: the crowd predictive distribution on log EV *before* the forecast.
-- `q_i(y) = Normal(log v_i, σ_c² + σ_obs²)`: the user's kernel smoothed by an observation-noise floor `σ_obs`, because later judges are noisy, correlated humans, not the true value.
+- `q_i = Normal(log v_i, σ_c² + σ_obs²)`: the forecaster's kernel smoothed by an observation-noise floor `σ_obs` (0.3), because later judges are noisy humans, not the true value.
+- `g_i = F_before_i` smoothed by the same `σ_obs`.
 - `C(m_i)`.
 
-When a later independent qualified participant `j` seals `y_j = log(v_j)`:
+Score each later independent report `y_j = log(v_j)` with the **quadratic (L2) proper scoring rule** `QS(p, y) = 2·p(y) − ∫p²`:
 
-`Δ_ij = log q_i(y_j) − log g(y_j | F_before_i)`,
+`D_ij = QS(q_i, y_j) − QS(g_i, y_j)`
 
-where `g(· | F)` is `F` smoothed by the same `σ_obs`. Clip each judge's contribution to `[−d0, +d0]`, exclude the usual (related accounts, exposed judges, coordination, voided forecasts), dampen near-duplicate peer reports, and average robustly:
+`score_i(t) = C(m_i) × mean_j(D_ij) / R_i`
 
-`z_i(t) = robust_weighted_average_j[clip(Δ_ij, −d0, +d0)]`.
+`R_i` is the largest `|D|` that **any** menu choice (any center, any of the three widths) could produce against `g_i`, computed from `g_i` and the menu only, never from the choice. Therefore `|score_i| ≤ C(m_i)` always, and nothing is clipped or trimmed. With no qualifying later evidence, `score_i(t) = 0`.
 
-Then
+**Why this is exactly incentive-compatible.** Let `p` be the forecaster's honest belief about where a later independent report will land. Then
 
-`score_i(t) = C(m_i) × clip(z_i(t) / z_ref, −1, +1)`.
+`E_p[score_i] = (C/R) × ( ∫p² − ∫(q_i − p)² − E_p[QS(g_i, Y)] )`.
 
-`σ_obs`, `d0`, `z_ref` are versioned calibration parameters chosen in offline trials. With no qualifying later evidence, `score_i(t) = 0`.
+`C`, `R` and the `g_i` term do not depend on the forecaster's choice, so expected points are an exact decreasing function of the L2 distance between the chosen kernel and the honest belief. Consequences:
 
-**Why this is incentive-compatible (within the three-level menu):**
+- **Valuation:** for any fixed confidence, the expected score is highest when the reported center is the honest center. Shading toward or away from the crowd always lowers it.
+- **Confidence:** among Low, Medium and High, the best choice is the width closest to the honest spread. If the belief matches one of the three kernels, that level is strictly best.
+- **Averaging over judges** is a plain mean, linear, so the property holds for any number of later reports.
+- The cap is identical across confidence levels and fixed before submission, so it does not distort the choice.
 
-- The log score is strictly proper: expected `log q(Y)` is maximized by the `q` that matches the user's actual belief about where later reports will land.
-- The baseline term `log g(y_j | F_before_i)` does not depend on anything the user chooses, so subtracting it preserves the maximizer; it just makes the score relative to the crowd, like a skill score.
-- Among three kernels of fixed widths, expected score is maximized by the width closest (in KL divergence) to the user's real belief. A user who is unsure should pick Low; picking High when unsure has negative expected points because the narrow kernel pays little for a report that lands two widths away.
-- The mapping from `z` to points is linear with a cap that is identical across confidence levels, so it does not reorder the choice. Symmetric clipping is a mild distortion toward lower-variance choices; the simulation harness measures it and the parameters are set so that honest selection remains optimal across the realistic range.
-- The previous design scored the *marginal improvement of the crowd mixture* (`F_after` vs `F_before`). The log of a mixture is not a proper score in the user's own kernel, and confidence-specific caps compounded the problem. Both are dropped.
+**What "honest" means:** the belief is about where *later independent blind buyers* will land (peer prediction). Because nobody sees the crowd before submitting and everyone sees the same listing facts, a buyer's best predictor of others' independent judgment is their own judgment. If later buyers share a bias, a correct contrarian is still penalized; only sale outcomes would fix that (out of scope).
 
-The maximum attainable `Δ` for a narrow kernel is higher than for a wide one (its peak density is higher), and the minimum is lower; that is the whole mechanism by which High "stakes more" without any separate stake. The product never displays the attainable extremes, because they depend on where `v_i` sits relative to the crowd.
+**Why the earlier log-score version was replaced:** clipping the log score made gains stop growing exactly where the crowd's density is low. A buyer whose honest view was far from the crowd expected more points by shading the number about 18% toward the crowd. The quadratic score is bounded by construction, so it needs no clipping.
+
+**Known, accepted exceptions:**
+- The newcomer floor (cumulative posted loss floored at −3 over the first 5 forecasts) makes the downside convex for those 5 forecasts and slightly favors High. It is kept deliberately for newcomer comfort.
+- The confidence level also sets the forecast's weight in the published crowd figure, which is not part of the forecaster's own score.
+
+**Verification (in code, must pass on every change):** for each true spread, the honest level has the highest expected points; shading the number by ±5% to ±40% in log terms always lowers expected points; the expected-points-equals-constant-minus-L2-distance identity holds even for a two-peaked belief; and `|D| ≤ R` over wide grids of reports, centers and crowd states.
 
 ### 6.4 Recalculation after every new opinion
 
@@ -295,7 +301,7 @@ For the **new** report, freeze `F_before`, the kernel parameters and the cap. Th
 Peer-predictive scoring uses later opinions as a proxy and can reward conformity among later judges or coordinated reports. Exaggerated confidence is no longer profitable in expectation, but collusion and off-platform influence remain. Accordingly:
 
 - Pilot with verified invited buyers; one real participant per business/snapshot; related-party checks.
-- Stress-test collective shared biases, copied reports, and intentional collusion in the simulation harness; verify in simulation that honest confidence selection maximizes expected points under the chosen `σ_obs`, `d0`, `z_ref`.
+- Stress-test collective shared biases, copied reports, and intentional collusion in the simulation harness; the propriety tests in 6.3 must keep passing.
 - Keep minimum report noise, bounded influence weights, caps and immutable submission order.
 - Do not suppress sincere minority valuations.
 - Do not call the result **actual accuracy**.
@@ -789,7 +795,7 @@ Required MVP protections:
 ### 17.3 Essential experiments
 
 1. **Input:** one number + confidence vs a range field, measuring dropout and completion time; keep the one-number flow unless evidence says otherwise.
-2. **Confidence:** tune `σ_c`, `σ_obs`, `d0`, `z_ref` so that in simulation the honest confidence choice maximizes expected points for agents with varying true uncertainty; measure the distortion from symmetric clipping.
+2. **Confidence:** tune `σ_c` and `σ_obs` against pilot dispersion; propriety holds for any values, so tuning changes only what each level means, not honesty.
 3. **Prior:** compare ask-only, model-only and blended priors (`w`) against held-out independent forecasts; tune `w` and the multiple table.
 4. **Scoring:** blind simulations with known latent EV; adversarial trials (sybils, coordinated judges, copycats, late contrarians).
 5. **Economy:** 3 starting points, free-below-3 reveals, 1 point at 3+, cap scale 10, newcomer floor −3; measure circulation and negative-balance rates.

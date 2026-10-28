@@ -62,11 +62,11 @@ Spec of record: `docs/DESIGN.md`. Working rules for agents: `CLAUDE.md`.
   tests prove honest width, honest center, the exact L2 identity and |score| <= cap; all 17 pass.
 - Fixed: ledger postings keyed per evaluation (untriggered recomputes could post only once); newcomer floor
   spillover to the buyer's other first-5 forecasts is now posted.
-- NOT yet run after these last edits: DB smoke test, full vitest, build, simulation. Run them first.
+- Verified Oct 28: DB smoke test (incl. repeat recompute and score = sum of deltas), 82 tests, typecheck, build, simulation all pass.
 - Design canvas "PriceAFirm UX": Email, Valuation form, Points, Value queue done. To do: Find deals artboard;
   fix the form to show possible score +/-5.8 (2 prior valuations) and the reveal as 1 point (count 3 includes
   the buyer; owner chose NOT to exclude own valuation).
-- Docs to update: design doc Section 6.3 (new scoring rule).
+- Design doc Section 6.3 rewritten for the quadratic rule (Oct 28).
 
 ## UI and UX: design is being finished separately (do not diverge)
 - The visual and interaction design is being finished on a Claude Design canvas ("PriceAFirm UX"), outside
