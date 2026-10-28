@@ -293,7 +293,7 @@ function SubmitOutcome({ r }: { r: Extract<SubmitListingResult, { status: "appro
   if (r.status === "pending_review") {
     return (
       <Card>
-        <p className="text-sm text-accent">Awaiting a quick check</p>
+        <p className="text-sm text-accent-text">Awaiting a quick check</p>
         <h2 className="text-xl font-semibold">Listing saved</h2>
         <p className="mt-2 text-sm text-text/90">{r.message}</p>
         <div className="mt-4 flex gap-3">

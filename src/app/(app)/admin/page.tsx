@@ -153,7 +153,7 @@ async function ReviewTab() {
                 <dd>{s.industry_tags.join(", ") || "none"}</dd>
               </div>
             </dl>
-            {held.get(s.id) ? <p className="mt-3 text-sm text-accent">{held.get(s.id)} valuation request(s) waiting for this listing; they are emailed when you approve.</p> : null}
+            {held.get(s.id) ? <p className="mt-3 text-sm text-accent-text">{held.get(s.id)} valuation request(s) waiting for this listing; they are emailed when you approve.</p> : null}
             <EditFactsForm
               snapshotId={s.id}
               initial={{ headline: s.headline, industry: s.industry, industry_tags: s.industry_tags, state: s.state, metro: s.metro, asking_price: s.asking_price, revenue: s.revenue, earnings: s.earnings, earnings_type: s.earnings_type }}
@@ -338,7 +338,7 @@ async function ScoringTab() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">
-              Scoring mode: <span className={mode === "shadow" ? "text-accent" : "text-pos"}>{mode}</span>
+              Scoring mode: <span className={mode === "shadow" ? "text-accent-text" : "text-pos"}>{mode}</span>
             </h2>
             <p className="mt-1 text-sm text-muted">
               {mode === "shadow" ? "Scores are computed and logged but no point deltas are posted." : "Score deltas post to the ledger as later valuations arrive."} Change with
@@ -415,7 +415,7 @@ async function ForecastsTab() {
                 <Link href={`/value/${r.snapshot_id}`} className="hover:underline">
                   {snaps.get(r.snapshot_id)?.headline ?? "Listing"}
                 </Link>
-                {r.information_level === "cim" ? <span className="ml-1 text-xs text-accent">CIM</span> : null}
+                {r.information_level === "cim" ? <span className="ml-1 text-xs text-accent-text">CIM</span> : null}
               </td>
               <td>
                 <Money value={Number(r.value)} />

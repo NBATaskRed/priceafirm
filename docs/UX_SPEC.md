@@ -1,9 +1,9 @@
 # PriceAFirm UX spec
 
-**Status: DRAFT v1 (Oct 28, 2026), pending owner approval.** Source: the Claude Design canvas "PriceAFirm UX"
-(screens: valuation request email, valuation form + locked-in state on phone, My points on phone, Value
-businesses, Find deals). Until the owner approves, treat this as the direction, not yet the contract (see
-CLAUDE.md "UI and UX").
+**Status: APPROVED v1.1 (Oct 28, 2026).** Owner approved typefaces, wording and the valuation form, with one change:
+**light theme by default, dark theme as an option.** Source: the Claude Design canvas "PriceAFirm UX" (drawn in the
+dark theme; the light theme uses the same layout with the light tokens below). This is the source of truth for
+look, feel and copy.
 
 ## 1. Principles
 - **One job per screen.** Each screen has one primary action in amber; everything else is quiet.
@@ -15,19 +15,29 @@ CLAUDE.md "UI and UX").
 - **Honest by design.** Every crowd number says how many valuations it rests on and that it is a model estimate,
   not an offer. Possible points are shown before every commitment.
 
-## 2. Tokens
-| Token | Value | Use |
-|---|---|---|
-| ink | `#17181A` | page ground |
-| graphite | `#222428` | cards, fact tiles, segmented controls |
-| graphite-2 | `#1F2124` / `#1D1E21` | list rows / inputs |
-| rule | `#373A3F` (borders), `#2C2E33` (dividers, tracks) | lines |
-| paper | `#F2EEE6` | primary text, secondary buttons (filled) |
-| paper-soft | `#D8D3CA` | body copy on dark |
-| stone | `#A9A49B` | secondary text (passes 4.5:1 on ink) |
-| amber | `#F5A524` (text on amber: ink) | the one accent: primary buttons, points, your marker |
-| amber-tint | `#2A2418` | points chip ground |
-| gain / loss | `#8FD19E` / `#F28B82` | score moves, always with a + or − sign |
+## 2. Tokens and themes
+Light is the default for everyone. Members can switch to dark from the account menu or Account page; the choice is
+stored in the `paf_theme` cookie (one year) and applied on first paint. All colors come from CSS variables in
+`src/app/globals.css`; components never hard-code hex values.
+
+| Token | Light (default) | Dark | Use |
+|---|---|---|---|
+| bg | `#F6F6F4` | `#17181A` | page ground |
+| surface | `#FFFFFF` | `#222428` | cards, fact tiles, segmented controls |
+| surface-2 | `#EEEDE9` | `#1D1E21` | inputs, hover, secondary tiles |
+| border / border-strong | `#E0DDD6` / `#C9C5BC` | `#2C2E33` / `#373A3F` | dividers / control borders |
+| track | `#E3E0D9` | `#2C2E33` | value band and bar tracks |
+| text | `#17181A` | `#F2EEE6` | primary text |
+| text-soft | `#3D3A35` | `#D8D3CA` | body copy |
+| muted | `#5F5B54` | `#A9A49B` | secondary text (4.5:1 or better) |
+| accent | `#F5A524` | `#F5A524` | fills only: primary buttons, your marker, assumed-range band |
+| accent-ink | `#17181A` | `#17181A` | text on accent |
+| accent-text | `#8A5A00` | `#F5A524` | amber text and figures (points, ±C, ratios at or above 1.00x) |
+| accent-soft | `#FCEFD6` | `#2A2418` | points chip ground |
+| invert-bg / invert-ink | `#17181A` / `#FFFFFF` | `#F2EEE6` / `#17181A` | secondary filled buttons ("Value it", selected pill) |
+| pos / neg | `#1E7A45` / `#B3261E` | `#8FD19E` / `#F28B82` | score moves, always with a + or − sign |
+
+Light theme surfaces get a hairline shadow (`0 1px 2px rgba(23,24,26,.06)`); dark has none.
 
 Radii: 999 chips; 14 primary buttons (phone) / 12 (desktop); 16 large cards; 12 tiles and inputs; 10 small buttons.
 Touch targets at least 44 px (primary buttons 52 to 54 px).
@@ -124,6 +134,6 @@ Order, top to bottom:
 - Crowd = "buyers" / "what buyers think"; never "the crowd" in UI.
 - Score = "your score" / "points at stake"; never "accuracy".
 
-## 6. Open items for the owner
-- Approve this spec (then it becomes the contract for Claude Code).
-- Screens not yet drawn, to follow the same rules: sign-in, Add a listing, Opened listings, Account, Admin.
+## 6. Screens without their own drawing
+Sign-in, Add a listing, Opened listings, Account and Admin follow the same tokens, type, naming and one-primary-action
+rule. Account holds the theme switch and the optional password. The Add a listing valuation block reuses 4.2 items 3 to 6.

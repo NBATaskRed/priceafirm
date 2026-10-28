@@ -5,25 +5,57 @@
   Contrast of every text token against every surface is >= 4.5:1.
 */
 :root {
-  --bg: #141414;
-  --surface: #1d1d1d;
-  --surface-2: #262626;
-  --border: #333333;
-  --border-strong: #454545;
-  --text: #f3efe8;
-  --muted: #a39e95;
+  /* Light (default). Every text token passes 4.5:1 on --bg, --surface and --surface-2. */
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #eeede9;
+  --border: #e0ddd6;
+  --border-strong: #c9c5bc;
+  --text: #17181a;
+  --text-soft: #3d3a35;
+  --muted: #5f5b54;
+  --placeholder: #77726a;
+  --accent: #f5a524; /* fills only; never text on light */
+  --accent-ink: #17181a; /* text on accent */
+  --accent-text: #8a5a00; /* amber for text and figures */
+  --accent-soft: #fcefd6;
+  --invert-bg: #17181a; /* secondary filled buttons */
+  --invert-ink: #ffffff;
+  --track: #e3e0d9;
+  --pos: #1e7a45;
+  --neg: #b3261e;
+  --focus: #8a5a00;
+  --shadow: 0 1px 2px rgba(23, 24, 26, 0.06);
+
+  --font-ui: var(--font-hanken), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-figures: var(--font-archivo), var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 16px;
+  --radius-control: 12px;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #17181a;
+  --surface: #222428;
+  --surface-2: #1d1e21;
+  --border: #2c2e33;
+  --border-strong: #373a3f;
+  --text: #f2eee6;
+  --text-soft: #d8d3ca;
+  --muted: #a9a49b;
+  --placeholder: #8b867e;
   --accent: #f5a524;
-  --accent-soft: rgba(245, 165, 36, 0.14);
-  --accent-ink: #141414;
+  --accent-ink: #17181a;
+  --accent-text: #f5a524;
+  --accent-soft: #2a2418;
+  --invert-bg: #f2eee6;
+  --invert-ink: #17181a;
+  --track: #2c2e33;
   --pos: #8fd19e;
   --neg: #f28b82;
-  --focus: #ffd27a;
-
-  --font-ui: var(--font-manrope), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-figures: var(--font-archivo), var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
-
-  --radius-card: 10px;
-  --radius-control: 6px;
+  --focus: #f5a524;
+  --shadow: none;
   color-scheme: dark;
 }
 
@@ -38,6 +70,11 @@
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-accent-ink: var(--accent-ink);
+  --color-accent-text: var(--accent-text);
+  --color-text-soft: var(--text-soft);
+  --color-invert-bg: var(--invert-bg);
+  --color-invert-ink: var(--invert-ink);
+  --color-track: var(--track);
   --color-pos: var(--pos);
   --color-neg: var(--neg);
   --color-focus: var(--focus);
@@ -71,6 +108,7 @@ body {
 /* Figures: every number in the product uses tabular figures so columns line up. */
 .figures {
   font-family: var(--font-figures);
+  font-variation-settings: "wdth" 118;
   font-variant-numeric: tabular-nums lining-nums;
   font-feature-settings: "tnum" 1, "lnum" 1;
   letter-spacing: -0.01em;
@@ -110,10 +148,10 @@ h3 {
   transition: border-color 120ms ease;
 }
 .input::placeholder {
-  color: #7c776f;
+  color: var(--placeholder);
 }
 .input:hover {
-  border-color: #5a5a5a;
+  border-color: var(--muted);
 }
 .input:focus {
   outline: none;

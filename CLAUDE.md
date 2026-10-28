@@ -39,8 +39,8 @@ Supabase (Postgres + magic-link auth), Node 24. Same stack as fundstamp.com.
 
 ## UI and UX: design is being finished separately (do not diverge)
 - The visual and interaction design is being finished on a Claude Design canvas ("PriceAFirm UX"), outside
-  this repo. `docs/UX_SPEC.md` is its written form: DRAFT until its status line says APPROVED, then it is the
-  source of truth for look, feel and copy.
+  this repo. `docs/UX_SPEC.md` is its written form and is APPROVED (v1.1, light default + dark option): it is the
+  source of truth for look, feel and copy. Implement new UI to it; do not invent other styles.
 - Until then: do NOT restyle, re-layout or rewrite user-facing copy on any screen, and do not add new screens'
   visual treatments. Functional fixes (bugs, data, validation, accessibility defects) are fine; keep the
   existing components and classes.

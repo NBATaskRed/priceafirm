@@ -155,7 +155,7 @@ function ListingCard({ listing }: { listing: ApprovedListing }) {
             <p className="text-sm text-muted">{locationText(s)}</p>
           </div>
           <div className="text-right">
-            <p className="figures text-xl font-semibold text-accent">±{c.toFixed(1)}</p>
+            <p className="figures text-xl font-semibold text-accent-text">±{c.toFixed(1)}</p>
             <p className="text-xs text-muted">possible score</p>
           </div>
         </div>
