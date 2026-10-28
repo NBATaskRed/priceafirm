@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Value this business</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&amp;family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#17181A}
+a{color:#F2EEE6}a:hover{color:#F5A524}
+.num{font-family:'Archivo',sans-serif;font-variation-settings:'wdth' 118;font-feature-settings:'tnum' 1}
+.ev-input{background:transparent;border:0;outline:0;color:#F2EEE6;width:100%;font-family:'Archivo',sans-serif;font-variation-settings:'wdth' 118;font-size:40px;font-weight:700;letter-spacing:-0.01em;padding:0}
+.ev-wrap:focus-within{border-color:#F5A524 !important}
+button:focus-visible,a:focus-visible{outline:2px solid #F5A524;outline-offset:2px}
+@media (prefers-reduced-motion: no-preference){.band{transition:left .35s cubic-bezier(.2,.8,.2,1),width .35s cubic-bezier(.2,.8,.2,1)}.seal{animation:seal .5s cubic-bezier(.2,1.4,.4,1) both}}
+@keyframes seal{from{transform:scale(.6) rotate(-12deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #17181A; color: #F2EEE6; font-family: 'Hanken Grotesk', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 10px">
+    <span style="font-weight: 700; font-size: 17px; letter-spacing: -0.01em">PriceAFirm</span>
+    <span class="num" style="display: inline-flex; align-items: center; gap: 6px; background: #2A2418; color: #F5A524; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 700">3.0 pts</span>
+  </header>
+
+  <sc-if value="{{ showForm }}" hint-placeholder-val="{{ true }}">
+  <main style="flex: 1; display: flex; flex-direction: column; padding: 8px 20px 20px; gap: 18px; overflow: auto">
+
+    <section style="display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font-size: 26px; line-height: 1.15; font-weight: 700; letter-spacing: -0.015em">HVAC services</h1>
+      <p style="margin: 0; color: #A9A49B; font-size: 15px">Tampa Bay, Florida</p>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px">
+        <div style="background: #222428; border-radius: 12px; padding: 10px 12px">
+          <div style="color: #A9A49B; font-size: 12px">Asking</div>
+          <div class="num" style="font-size: 18px; font-weight: 700; margin-top: 2px">$2.9M</div>
+        </div>
+        <div style="background: #222428; border-radius: 12px; padding: 10px 12px">
+          <div style="color: #A9A49B; font-size: 12px">Revenue</div>
+          <div class="num" style="font-size: 18px; font-weight: 700; margin-top: 2px">$3.2M</div>
+        </div>
+        <div style="background: #222428; border-radius: 12px; padding: 10px 12px">
+          <div style="color: #A9A49B; font-size: 12px">SDE</div>
+          <div class="num" style="font-size: 18px; font-weight: 700; margin-top: 2px">$680K</div>
+        </div>
+      </div>
+      <p style="margin: 4px 0 0; color: #A9A49B; font-size: 13px">2 other buyers have valued this so far</p>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <label for="ev" style="font-size: 17px; font-weight: 600">What do you think it's worth?</label>
+      <div class="ev-wrap" style="display: flex; align-items: baseline; gap: 4px; border-bottom: 2px solid #373A3F; padding-bottom: 6px">
+        <span class="num" style="font-size: 40px; font-weight: 700; color: #A9A49B">$</span>
+        <input id="ev" class="ev-input" inputmode="numeric" autocomplete="off" value="{{ display }}" onChange="{{ onType }}" aria-describedby="ev-help">
+      </div>
+      <div id="ev-help" style="display: flex; justify-content: space-between; font-size: 14px; color: #A9A49B">
+        <span>Cash-free, debt-free enterprise value</span>
+        <span class="num" style="color: #F2EEE6; font-weight: 600">{{ multiple }}</span>
+      </div>
+    </section>
+
+    <section aria-label="Your assumed range against the asking price" style="display: flex; flex-direction: column; gap: 8px">
+      <div style="position: relative; height: 44px">
+        <div style="position: absolute; left: 0; right: 0; top: 20px; height: 4px; background: #2C2E33; border-radius: 2px"></div>
+        <div class="band" style="position: absolute; top: 12px; height: 20px; border-radius: 10px; background: rgba(245,165,36,0.22); border: 1px solid rgba(245,165,36,0.55); left: {{ bandLeft }}; width: {{ bandWidth }}"></div>
+        <div style="position: absolute; top: 4px; width: 2px; height: 36px; background: #A9A49B; left: {{ askLeft }}"></div>
+        <div class="band" style="position: absolute; top: 14px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: #F5A524; box-shadow: 0 0 0 4px #17181A; left: {{ youLeft }}"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 12px; color: #A9A49B">
+        <span class="num">$1M</span>
+        <span>Grey line is the asking price</span>
+        <span class="num">$8M</span>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <span id="conf-label" style="font-size: 17px; font-weight: 600">How sure are you?</span>
+      <div role="radiogroup" aria-labelledby="conf-label" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+        <sc-for list="{{ levels }}" as="lv" hint-placeholder-count="3">
+          <button type="button" role="radio" aria-checked="{{ lv.checked }}" onClick="{{ lv.pick }}" style="{{ lv.style }}">{{ lv.label }}</button>
+        </sc-for>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 1.45; color: #D8D3CA">{{ confCopy }}</p>
+    </section>
+
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; background: #222428; border-radius: 12px; padding: 12px 14px">
+        <span style="font-size: 14px; color: #A9A49B">Points at stake</span>
+        <span class="num" style="font-size: 20px; font-weight: 700">±5.8</span>
+      </div>
+      <button type="button" onClick="{{ submit }}" style="height: 54px; border: 0; border-radius: 14px; background: #F5A524; color: #17181A; font-family: 'Hanken Grotesk', sans-serif; font-size: 17px; font-weight: 700; cursor: pointer">Lock in my valuation</button>
+    </div>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ showSealed }}" hint-placeholder-val="{{ false }}">
+  <main style="flex: 1; display: flex; flex-direction: column; padding: 12px 20px 20px; gap: 18px">
+    <section style="display: flex; align-items: center; gap: 14px">
+      <div class="seal" aria-hidden="true" style="width: 56px; height: 56px; border-radius: 50%; background: #F5A524; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#17181A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+      </div>
+      <div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.015em">Locked in</h1>
+        <p style="margin: 2px 0 0; color: #A9A49B; font-size: 14px">You said <span class="num" style="color: #F2EEE6; font-weight: 700">{{ youShort }}</span>, {{ confWord }} confidence</p>
+      </div>
+    </section>
+
+    <section style="background: #222428; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 14px; color: #A9A49B">Your score for this business</span>
+      <span class="num" style="font-size: 34px; font-weight: 700">0.0</span>
+      <span style="font-size: 14px; line-height: 1.45; color: #D8D3CA">It moves up or down as other buyers value this business, anywhere between −5.8 and +5.8.</span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 600">What buyers think so far</h2>
+      <div style="display: flex; align-items: baseline; gap: 10px">
+        <span class="num" style="font-size: 40px; font-weight: 700; letter-spacing: -0.01em">$2.78M</span>
+        <span style="font-size: 15px; color: #A9A49B">median value</span>
+      </div>
+      <div style="position: relative; height: 36px">
+        <div style="position: absolute; left: 0; right: 0; top: 16px; height: 4px; background: #2C2E33; border-radius: 2px"></div>
+        <div style="position: absolute; top: 10px; height: 16px; left: 30%; width: 34%; border-radius: 8px; background: rgba(242,238,230,0.16); border: 1px solid rgba(242,238,230,0.4)"></div>
+        <div style="position: absolute; top: 2px; width: 2px; height: 32px; background: #A9A49B; left: 51%"></div>
+        <div style="position: absolute; top: 11px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #F5A524; left: {{ youLeft }}"></div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <div style="background: #222428; border-radius: 12px; padding: 10px 12px">
+          <div class="num" style="font-size: 18px; font-weight: 700">0.96x</div>
+          <div style="color: #A9A49B; font-size: 12px; margin-top: 2px">of the asking price</div>
+        </div>
+        <div style="background: #222428; border-radius: 12px; padding: 10px 12px">
+          <div class="num" style="font-size: 18px; font-weight: 700">46%</div>
+          <div style="color: #A9A49B; font-size: 12px; margin-top: 2px">chance it's worth more than ask</div>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; color: #A9A49B">Based on 3 independent valuations, yours included. Model estimates, not offers.</p>
+    </section>
+
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+      <a href="#" style="display: flex; align-items: center; justify-content: center; height: 54px; border-radius: 14px; background: #F5A524; color: #17181A; font-size: 17px; font-weight: 700; text-decoration: none">See the broker listing (1 point)</a>
+      <a href="#" style="display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 14px; border: 1px solid #373A3F; color: #F2EEE6; font-size: 16px; font-weight: 600; text-decoration: none">Value another business</a>
+    </div>
+  </main>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { value: 2650000, conf: 'medium', sealed: false };
+  }
+  renderVals() {
+    const SIG = { low: 0.55, medium: 0.35, high: 0.22 };
+    const v = this.state.value || 0;
+    const conf = this.state.conf;
+    const k = Math.exp(1.2816 * SIG[conf]);
+    const short = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(n >= 1e7 ? 1 : 2).replace(/\.?0+$/, '') + 'M' : '$' + Math.round(n / 1000) + 'K';
+    const lmin = Math.log(1e6), lmax = Math.log(8e6);
+    const pos = (n) => Math.max(0, Math.min(100, (Math.log(Math.max(n, 1)) - lmin) / (lmax - lmin) * 100));
+    const lo = v / k, hi = v * k;
+    const left = pos(lo), right = pos(hi);
+    const words = { low: 'Low', medium: 'Medium', high: 'High' };
+    const copy = {
+      low: 'Low: we assume roughly ' + short(lo) + ' to ' + short(hi) + '. Small gains, small losses, whatever other buyers say.',
+      medium: 'Medium: we assume roughly ' + short(lo) + ' to ' + short(hi) + '. You earn more when later valuations land near yours.',
+      high: 'High: we assume roughly ' + short(lo) + ' to ' + short(hi) + '. Biggest gains if later valuations land near yours, biggest losses if they don’t.'
+    };
+    const base = "height: 48px; border-radius: 12px; font-family: 'Hanken Grotesk', sans-serif; font-size: 16px; font-weight: 600; cursor: pointer;";
+    const levels = ['low', 'medium', 'high'].map((c) => ({
+      label: words[c],
+      checked: c === conf ? 'true' : 'false',
+      style: base + (c === conf ? ' background: #F2EEE6; color: #17181A; border: 1px solid #F2EEE6;' : ' background: transparent; color: #F2EEE6; border: 1px solid #373A3F;'),
+      pick: () => this.setState({ conf: c })
+    }));
+    return {
+      showForm: !this.state.sealed,
+      showSealed: this.state.sealed,
+      display: v ? v.toLocaleString('en-US') : '',
+      onType: (e) => { const d = String(e.target.value).replace(/[^0-9]/g, '').slice(0, 11); this.setState({ value: Number(d) || 0 }); },
+      multiple: v > 0 ? '= ' + (v / 680000).toFixed(1) + 'x SDE' : '',
+      bandLeft: left + '%',
+      bandWidth: Math.max(2, right - left) + '%',
+      askLeft: pos(2900000) + '%',
+      youLeft: pos(v || 1e6) + '%',
+      levels,
+      confCopy: v > 0 ? copy[conf] : 'Type a number to see the range we assume for it.',
+      confWord: words[conf].toLowerCase(),
+      youShort: v > 0 ? short(v) : '$0',
+      submit: () => { if (v > 0) this.setState({ sealed: true }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

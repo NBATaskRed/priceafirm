@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Value businesses</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&amp;family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#17181A}
+a{color:#F2EEE6}a:hover{color:#F5A524}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #F5A524;outline-offset:2px}
+.num{font-family:'Archivo',sans-serif;font-variation-settings:'wdth' 118;font-feature-settings:'tnum' 1}
+.row:hover{background:#25272B}
+</style>
+</helmet>
+<div style="min-height: 980px; background: #17181A; color: #F2EEE6; font-family: 'Hanken Grotesk', sans-serif">
+  <header style="border-bottom: 1px solid #2C2E33">
+    <div style="max-width: 1160px; margin: 0 auto; padding: 16px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 24px">
+      <span style="font-weight: 700; font-size: 18px">PriceAFirm</span>
+      <nav aria-label="Main" style="display: flex; flex-wrap: wrap; gap: 4px; flex: 1">
+        <a href="Deals.dc.html" style="padding: 8px 12px; border-radius: 8px; color: #A9A49B; text-decoration: none; font-size: 15px">Find deals</a>
+        <a href="#" aria-current="page" style="padding: 8px 12px; border-radius: 8px; background: #222428; color: #F2EEE6; text-decoration: none; font-size: 15px; font-weight: 600">Value businesses</a>
+        <a href="#" style="padding: 8px 12px; border-radius: 8px; color: #A9A49B; text-decoration: none; font-size: 15px">Add a listing</a>
+        <a href="Points.dc.html" style="padding: 8px 12px; border-radius: 8px; color: #A9A49B; text-decoration: none; font-size: 15px">My points</a>
+        <a href="#" style="padding: 8px 12px; border-radius: 8px; color: #A9A49B; text-decoration: none; font-size: 15px">Opened listings</a>
+      </nav>
+      <span class="num" style="background: #2A2418; color: #F5A524; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 700">3.0 pts</span>
+    </div>
+  </header>
+
+  <main style="max-width: 1160px; margin: 0 auto; padding: 40px 24px 64px; display: flex; flex-direction: column; gap: 28px">
+    <section style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 20px">
+      <div style="max-width: 620px">
+        <h1 style="margin: 0; font-size: 40px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em">Value businesses</h1>
+        <p style="margin: 10px 0 0; font-size: 17px; line-height: 1.5; color: #D8D3CA">Say what a business is worth and earn points when other buyers agree later. The fewer valuations a listing has, the more points are at stake.</p>
+      </div>
+      <div role="group" aria-label="Sort" style="display: flex; background: #222428; border-radius: 12px; padding: 4px; gap: 4px">
+        <button type="button" aria-pressed="true" style="border: 0; border-radius: 9px; padding: 10px 14px; background: #F2EEE6; color: #17181A; font: 600 14px 'Hanken Grotesk', sans-serif; cursor: pointer">Most points</button>
+        <button type="button" aria-pressed="false" style="border: 0; border-radius: 9px; padding: 10px 14px; background: transparent; color: #F2EEE6; font: 600 14px 'Hanken Grotesk', sans-serif; cursor: pointer">Fewest valuations</button>
+        <button type="button" aria-pressed="false" style="border: 0; border-radius: 9px; padding: 10px 14px; background: transparent; color: #F2EEE6; font: 600 14px 'Hanken Grotesk', sans-serif; cursor: pointer">Best fit for me</button>
+      </div>
+    </section>
+
+    <form role="search" style="display: flex; flex-wrap: wrap; gap: 12px">
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #A9A49B; flex: 1 1 260px">Industry
+        <input placeholder="e.g. HVAC, logistics, software" style="height: 44px; border-radius: 10px; border: 1px solid #373A3F; background: #1D1E21; color: #F2EEE6; padding: 0 12px; font: 15px 'Hanken Grotesk', sans-serif">
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #A9A49B; flex: 0 1 160px">State
+        <select style="height: 44px; border-radius: 10px; border: 1px solid #373A3F; background: #1D1E21; color: #F2EEE6; padding: 0 10px; font: 15px 'Hanken Grotesk', sans-serif"><option>Any</option><option>FL</option><option>GA</option></select>
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #A9A49B; flex: 0 1 200px">Earnings at least
+        <input placeholder="$300K" style="height: 44px; border-radius: 10px; border: 1px solid #373A3F; background: #1D1E21; color: #F2EEE6; padding: 0 12px; font: 15px 'Hanken Grotesk', sans-serif">
+      </label>
+    </form>
+
+    <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid #2C2E33">
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+        <li class="row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px 32px; padding: 22px 16px; border-bottom: 1px solid #2C2E33; border-radius: 4px">
+          <div style="flex: 1 1 260px; min-width: 0">
+            <div style="font-size: 19px; font-weight: 700">{{ r.headline }}</div>
+            <div style="font-size: 14px; color: #A9A49B; margin-top: 4px">{{ r.place }}</div>
+          </div>
+          <dl style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 0; flex: 1 1 320px">
+            <div><dt style="font-size: 12px; color: #A9A49B">Asking</dt><dd class="num" style="margin: 2px 0 0; font-size: 17px; font-weight: 700">{{ r.ask }}</dd></div>
+            <div><dt style="font-size: 12px; color: #A9A49B">Revenue</dt><dd class="num" style="margin: 2px 0 0; font-size: 17px; font-weight: 700">{{ r.rev }}</dd></div>
+            <div><dt style="font-size: 12px; color: #A9A49B">{{ r.etype }}</dt><dd class="num" style="margin: 2px 0 0; font-size: 17px; font-weight: 700">{{ r.earn }}</dd></div>
+          </dl>
+          <div style="display: flex; align-items: center; gap: 20px; flex: 0 0 auto">
+            <div style="text-align: right; min-width: 120px">
+              <div class="num" style="font-size: 26px; font-weight: 800; color: #F5A524">{{ r.cap }}</div>
+              <div style="font-size: 13px; color: #A9A49B">{{ r.count }}</div>
+            </div>
+            <a href="Main.dc.html" style="display: inline-flex; align-items: center; height: 44px; padding: 0 18px; border-radius: 10px; background: #F2EEE6; color: #17181A; font-weight: 700; font-size: 15px; text-decoration: none">Value it</a>
+          </div>
+        </li>
+      </sc-for>
+    </ul>
+    <p style="margin: 0; font-size: 14px; color: #A9A49B">Nothing here shows what other buyers think, so valuing stays blind. You'll see the combined view right after you lock in your number.</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      rows: [
+        { headline: 'Industrial maintenance', place: 'Atlanta, Georgia', ask: '$3.6M', rev: '$4.5M', etype: 'EBITDA', earn: '$610K', cap: '±10.0', count: 'No valuations yet' },
+        { headline: 'Specialty manufacturing', place: 'Charlotte, North Carolina', ask: '$5.5M', rev: '$7.8M', etype: 'EBITDA', earn: '$1.25M', cap: '±10.0', count: 'No valuations yet' },
+        { headline: 'Regional logistics', place: 'Orlando, Florida', ask: '$4.1M', rev: '$6.5M', etype: 'EBITDA', earn: '$910K', cap: '±7.1', count: '1 valuation so far' },
+        { headline: 'HVAC services', place: 'Tampa Bay, Florida', ask: '$2.9M', rev: '$3.2M', etype: 'SDE', earn: '$680K', cap: '±5.8', count: '2 valuations so far' },
+        { headline: 'B2B software', place: 'Austin, Texas', ask: '$2.4M', rev: '$1.9M', etype: 'SDE', earn: '$520K', cap: '±4.5', count: '4 valuations so far' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Find deals</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&amp;family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#17181A}
+a{color:#F2EEE6}a:hover{color:#F5A524}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #F5A524;outline-offset:2px}
+.num{font-family:'Archivo',sans-serif;font-variation-settings:'wdth' 118;font-feature-settings:'tnum' 1}
+</style>
+</helmet>
+<div style="min-height: 1060px; background: #17181A; color: #F2EEE6; font-family: 'Hanken Grotesk', sans-serif">
+  <header style="border-bottom: 1px solid #2C2E33">
+    <div style="max-width: 1160px; margin: 0 auto; padding: 16px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 24px">
+      <span style="font-weight: 700; font-size: 18px">PriceAFirm</span>
+      <nav aria-label="Main" style="display: flex; flex-wrap: wrap; gap: 4px; flex: 1">
+        <a href="#" aria-current="page" style="padding: 8px 12px; border-radius: 8px; background: #222428; color: #F2EEE6; text-decoration: none; font-size: 15px; font-weight: 600">Find deals</a>
+        <a href="Queue.dc.html" style="padding: 8px 12px; border-radius: 8px; color: #A9A49B; text-decoration: none; font-size: 15px">Value businesses</a>
+        <a href="#" style="padding: 8px 12px; border-radius: 8px; color: #A9A49B; text-decoration: none; font-size: 15px">Add a listing</a>
+        <a href="Points.dc.html" style="padding: 8px 12px; border-radius: 8px; color: #A9A49B; text-decoration: none; font-size: 15px">My points</a>
+        <a href="#" style="padding: 8px 12px; border-radius: 8px; color: #A9A49B; text-decoration: none; font-size: 15px">Opened listings</a>
+      </nav>
+      <span class="num" style="background: #2A2418; color: #F5A524; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 700">{{ balance }} pts</span>
+    </div>
+  </header>
+
+  <sc-if value="{{ showGate }}" hint-placeholder-val="{{ true }}">
+  <main style="max-width: 640px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 20px">
+    <h1 style="margin: 0; font-size: 36px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em">Before you look</h1>
+    <p style="margin: 0; font-size: 18px; line-height: 1.55; color: #D8D3CA">Listings here show what other buyers think they're worth. Once you've seen a listing here, valuing it can't earn you points.</p>
+    <p style="margin: 0; font-size: 16px; line-height: 1.55; color: #A9A49B">Want points and the deal? Value it first in Value businesses. You'll see the buyers' view right after.</p>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px">
+      <button type="button" onClick="{{ enter }}" style="height: 52px; padding: 0 22px; border: 0; border-radius: 12px; background: #F5A524; color: #17181A; font: 700 16px 'Hanken Grotesk', sans-serif; cursor: pointer">Show me deals</button>
+      <a href="Queue.dc.html" style="display: inline-flex; align-items: center; height: 52px; padding: 0 20px; border-radius: 12px; border: 1px solid #373A3F; color: #F2EEE6; font-weight: 600; font-size: 16px; text-decoration: none">Value businesses first</a>
+    </div>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ showResults }}" hint-placeholder-val="{{ false }}">
+  <main style="max-width: 1160px; margin: 0 auto; padding: 36px 24px 64px; display: flex; flex-direction: column; gap: 22px">
+    <h1 style="margin: 0; font-size: 40px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em">Find deals</h1>
+
+    <form role="search" style="display: flex; flex-direction: column; gap: 12px">
+      <label for="q" style="font-size: 15px; color: #A9A49B">Describe what you're looking for</label>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px">
+        <input id="q" value="B2B services in Georgia or Florida, SDE at least $300K, under $5M" style="flex: 1 1 420px; height: 52px; border-radius: 12px; border: 1px solid #373A3F; background: #1D1E21; color: #F2EEE6; padding: 0 16px; font: 16px 'Hanken Grotesk', sans-serif">
+        <button type="button" style="height: 52px; padding: 0 22px; border: 0; border-radius: 12px; background: #F2EEE6; color: #17181A; font: 700 16px 'Hanken Grotesk', sans-serif; cursor: pointer">Search</button>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <span style="font-size: 13px; color: #A9A49B">We read that as</span>
+        <sc-for list="{{ chips }}" as="c" hint-placeholder-count="4">
+          <span style="display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 999px; background: #222428; border: 1px solid #373A3F; font-size: 14px">{{ c.label }}</span>
+        </sc-for>
+      </div>
+    </form>
+
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px">
+      <p style="margin: 0; font-size: 16px; color: #D8D3CA">8 matches, best value for the price first</p>
+      <p style="margin: 0; font-size: 14px; color: #A9A49B">Model estimates from buyers' valuations, not offers</p>
+    </div>
+
+    <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px">
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="3">
+        <li style="background: #1F2124; border: 1px solid #2C2E33; border-radius: 16px; padding: 20px 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 18px 36px">
+          <div style="flex: 1 1 240px; min-width: 0">
+            <div style="font-size: 19px; font-weight: 700">{{ r.headline }}</div>
+            <div style="font-size: 14px; color: #A9A49B; margin-top: 4px">{{ r.place }}</div>
+            <div class="num" style="font-size: 14px; color: #D8D3CA; margin-top: 10px">{{ r.facts }}</div>
+          </div>
+          <sc-if value="{{ r.hasCrowd }}" hint-placeholder-val="{{ true }}">
+            <div style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 8px">
+              <div style="display: flex; align-items: baseline; gap: 10px">
+                <span class="num" style="font-size: 32px; font-weight: 800; color: {{ r.ratioColor }}">{{ r.ratio }}</span>
+                <span style="font-size: 14px; color: #A9A49B">buyers' value vs. asking price</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px">
+                <div aria-hidden="true" style="flex: 1; height: 6px; border-radius: 3px; background: #2C2E33; overflow: hidden"><div style="height: 6px; border-radius: 3px; background: #F2EEE6; width: {{ r.probWidth }}"></div></div>
+                <span style="font-size: 14px; color: #D8D3CA; white-space: nowrap">{{ r.prob }}</span>
+              </div>
+              <span style="font-size: 13px; color: #A9A49B">{{ r.count }}</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ r.noCrowd }}" hint-placeholder-val="{{ false }}">
+            <div style="flex: 1 1 300px; font-size: 15px; color: #A9A49B">No independent valuations yet. Value it first and you'll see the buyers' view as it forms.</div>
+          </sc-if>
+          <div style="flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px">
+            <button type="button" onClick="{{ r.reveal }}" style="{{ r.btnStyle }}">{{ r.btn }}</button>
+            <span style="font-size: 13px; color: #A9A49B">{{ r.btnNote }}</span>
+          </div>
+        </li>
+      </sc-for>
+    </ul>
+  </main>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1060}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { entered: false, opened: {}, balance: 3 };
+  }
+  renderVals() {
+    const data = [
+      { id: 'a', headline: 'Industrial maintenance', place: 'Atlanta, Georgia', facts: 'Ask $3.6M   Revenue $4.5M   EBITDA $610K', ratio: '1.23x', prob: '78% chance it is worth more than ask', p: 78, n: 4 },
+      { id: 'b', headline: 'Commercial cleaning', place: 'Jacksonville, Florida', facts: 'Ask $1.4M   Revenue $2.1M   SDE $390K', ratio: '1.08x', prob: '61% chance it is worth more than ask', p: 61, n: 1 },
+      { id: 'c', headline: 'Regional logistics', place: 'Orlando, Florida', facts: 'Ask $4.1M   Revenue $6.5M   EBITDA $910K', ratio: '0.91x', prob: '38% chance it is worth more than ask', p: 38, n: 3 },
+      { id: 'd', headline: 'Landscaping', place: 'Savannah, Georgia', facts: 'Ask $1.1M   Revenue $1.9M   SDE $310K', ratio: '', prob: '', p: 0, n: 0 }
+    ];
+    const rows = data.map((d) => {
+      const open = !!this.state.opened[d.id];
+      const paid = d.n >= 3;
+      const countText = d.n === 1 ? 'Based on 1 independent valuation' : d.n === 2 ? 'Based on 2 independent valuations, preliminary' : 'Based on ' + d.n + ' independent valuations';
+      const canPay = this.state.balance >= 1;
+      const base = "height: 46px; padding: 0 18px; border-radius: 10px; font: 700 15px 'Hanken Grotesk', sans-serif; cursor: pointer;";
+      return {
+        headline: d.headline, place: d.place, facts: d.facts,
+        hasCrowd: d.n > 0, noCrowd: d.n === 0,
+        ratio: d.ratio, prob: d.prob, probWidth: d.p + '%', count: countText,
+        ratioColor: d.ratio && parseFloat(d.ratio) >= 1 ? '#F5A524' : '#F2EEE6',
+        btn: open ? 'Open broker listing' : 'See the broker listing',
+        btnNote: open ? 'Yours to reopen any time' : paid ? (canPay ? '1 point' : 'Needs 1 point') : 'Free, fewer than 3 valuations',
+        btnStyle: base + (open ? ' background: transparent; color: #F2EEE6; border: 1px solid #373A3F;' : ' background: #F5A524; color: #17181A; border: 0;'),
+        reveal: () => {
+          if (open) return;
+          if (paid && !canPay) return;
+          this.setState({ opened: { ...this.state.opened, [d.id]: true }, balance: paid ? this.state.balance - 1 : this.state.balance });
+        }
+      };
+    });
+    return {
+      showGate: !this.state.entered,
+      showResults: this.state.entered,
+      enter: () => this.setState({ entered: true }),
+      balance: this.state.balance.toFixed(1),
+      chips: [{ label: 'B2B services' }, { label: 'GA or FL' }, { label: 'SDE at least $300K' }, { label: 'Ask under $5M' }],
+      rows
+    };
+  }
+}
+</script>
+</body>
+</html>

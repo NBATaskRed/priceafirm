@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My points</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&amp;family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#17181A}
+a{color:#F2EEE6}a:hover{color:#F5A524}
+a:focus-visible{outline:2px solid #F5A524;outline-offset:2px}
+.num{font-family:'Archivo',sans-serif;font-variation-settings:'wdth' 118;font-feature-settings:'tnum' 1}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #17181A; color: #F2EEE6; font-family: 'Hanken Grotesk', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 10px">
+    <span style="font-weight: 700; font-size: 17px">PriceAFirm</span>
+    <a href="#" style="font-size: 14px; color: #A9A49B; text-decoration: none">Account</a>
+  </header>
+
+  <main style="flex: 1; display: flex; flex-direction: column; gap: 18px; padding: 8px 20px 20px; overflow: auto">
+    <section style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 15px; color: #A9A49B">Your balance</span>
+      <span class="num" style="font-size: 64px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: #F5A524">4.6</span>
+      <span style="font-size: 15px; color: #D8D3CA">points, enough to open 4 well-valued listings</span>
+    </section>
+
+    <section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+      <div style="background: #222428; border-radius: 12px; padding: 12px">
+        <div class="num" style="font-size: 22px; font-weight: 700">6</div>
+        <div style="font-size: 12px; color: #A9A49B; margin-top: 2px">valued</div>
+      </div>
+      <div style="background: #222428; border-radius: 12px; padding: 12px">
+        <div class="num" style="font-size: 22px; font-weight: 700">3</div>
+        <div style="font-size: 12px; color: #A9A49B; margin-top: 2px">listings opened</div>
+      </div>
+      <div style="background: #222428; border-radius: 12px; padding: 12px">
+        <div class="num" style="font-size: 22px; font-weight: 700">+2.6</div>
+        <div style="font-size: 12px; color: #A9A49B; margin-top: 2px">earned so far</div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0 0 6px; font-size: 17px; font-weight: 600">Recent moves</h2>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #2C2E33">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 15px; font-weight: 600">Industrial maintenance, GA</span>
+          <span style="font-size: 13px; color: #A9A49B">A new buyer landed close to you</span>
+        </div>
+        <span class="num" style="font-size: 18px; font-weight: 700; color: #8FD19E">+2.7</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #2C2E33">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 15px; font-weight: 600">Regional logistics, FL</span>
+          <span style="font-size: 13px; color: #A9A49B">A new buyer landed far from you</span>
+        </div>
+        <span class="num" style="font-size: 18px; font-weight: 700; color: #F28B82">−1.1</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #2C2E33">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 15px; font-weight: 600">B2B software, TX</span>
+          <span style="font-size: 13px; color: #A9A49B">Opened the broker listing</span>
+        </div>
+        <span class="num" style="font-size: 18px; font-weight: 700">−1.0</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 15px; font-weight: 600">HVAC services, FL</span>
+          <span style="font-size: 13px; color: #A9A49B">Locked in, waiting for other buyers</span>
+        </div>
+        <span class="num" style="font-size: 18px; font-weight: 700; color: #A9A49B">0.0</span>
+      </div>
+    </section>
+
+    <section style="background: #222428; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 15px; font-weight: 600">Beginner's protection</span>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px" aria-hidden="true">
+        <div style="height: 6px; border-radius: 3px; background: #F5A524"></div>
+        <div style="height: 6px; border-radius: 3px; background: #F5A524"></div>
+        <div style="height: 6px; border-radius: 3px; background: #F5A524"></div>
+        <div style="height: 6px; border-radius: 3px; background: #373A3F"></div>
+        <div style="height: 6px; border-radius: 3px; background: #373A3F"></div>
+      </div>
+      <span style="font-size: 14px; line-height: 1.45; color: #D8D3CA">3 of your first 5 valuations used. Until then, you can't lose more than 3 points in total on them.</span>
+    </section>
+
+    <section style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0">
+      <span style="font-size: 15px; color: #A9A49B">Your skill rank</span>
+      <span style="font-size: 15px; color: #D8D3CA">Ready after 5 scored valuations (2 so far)</span>
+    </section>
+  </main>
+
+  <nav aria-label="Main" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #2C2E33; padding: 8px 6px 14px">
+    <a href="#" style="display: flex; justify-content: center; padding: 10px 0; font-size: 13px; color: #A9A49B; text-decoration: none">Find deals</a>
+    <a href="Main.dc.html" style="display: flex; justify-content: center; padding: 10px 0; font-size: 13px; color: #A9A49B; text-decoration: none">Value</a>
+    <a href="#" style="display: flex; justify-content: center; padding: 10px 0; font-size: 13px; color: #A9A49B; text-decoration: none">Add URL</a>
+    <a href="#" aria-current="page" style="display: flex; justify-content: center; padding: 10px 0; font-size: 13px; font-weight: 700; color: #F5A524; text-decoration: none">Points</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
