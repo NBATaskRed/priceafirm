@@ -3,6 +3,7 @@
 Same rules as CLAUDE.md, copied here for agents that read AGENTS.md.
 Design reference: docs/design/*.dc.html are the approved screen drawings (HTML; open in a browser, the dark-theme layout; light theme uses docs/UX_SPEC.md tokens).
 Never change scoring, point charges or valuation counts unless all tests in src/lib/quant and supabase/tests pass.
+How work is split between tools, guarded files and session rules: docs/WORKFLOW.md. Owner decisions: docs/DECISIONS.md.
 
 
 Crowd valuation and deal-discovery network for businesses listed for sale. Owner: Ashish Bhatt

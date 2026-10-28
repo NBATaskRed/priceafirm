@@ -101,3 +101,13 @@ Spec of record: `docs/DESIGN.md`. Working rules for agents: `CLAUDE.md`.
   in light and dark and fix visual issues against docs/UX_SPEC.md and the "PriceAFirm UX" canvas.
 - Known small deviations kept on purpose: no confidence level preselected; private note, valuation assumptions,
   Find deals valuation-count filter and example searches, and the My points valuations list are kept, styled quietly.
+
+## Open questions for Claude
+(ChatGPT/Codex: add questions here instead of changing scoring, points or design. Claude answers in batches.)
+- none yet
+
+## UI added pending design
+- none yet
+
+## Session log
+- 2026-10-28 (Claude): approved UX spec implemented; AGENTS.md, docs/design/, WORKFLOW.md and DECISIONS.md added for the two-tool split. Next: owner setup (GitHub, Supabase, Vercel keys, Resend), then ChatGPT does the visual check of every screen in both themes.
