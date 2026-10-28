@@ -54,7 +54,7 @@ export function LoginForm({ next, initialError }: { next: string; initialError: 
   if (state.kind === "sent") {
     return (
       <div>
-        <p className="text-lg font-semibold">Check your email</p>
+        <p className="text-[19px] font-bold">Check your email</p>
         <p className="mt-2 text-sm text-muted">
           We sent a sign-in link to <span className="text-text">{state.email}</span>. Open it on this device to continue.
         </p>
@@ -74,7 +74,7 @@ export function LoginForm({ next, initialError }: { next: string; initialError: 
         setMode(m);
         setState({ kind: "idle" });
       }}
-      className={`flex-1 rounded px-3 py-1.5 text-sm ${mode === m ? "bg-surface-2 text-text" : "text-muted hover:text-text"}`}
+      className={`seg-btn flex-1 ${mode === m ? "bg-invert-bg text-invert-ink hover:bg-invert-bg" : ""}`}
     >
       {label}
     </button>
@@ -82,7 +82,7 @@ export function LoginForm({ next, initialError }: { next: string; initialError: 
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
-      <div role="tablist" aria-label="Sign-in method" className="flex gap-1 rounded-md border border-border p-1">
+      <div role="tablist" aria-label="Sign-in method" className="seg flex w-full">
         {tab("link", "Email me a link")}
         {tab("password", "Password")}
       </div>
@@ -90,18 +90,18 @@ export function LoginForm({ next, initialError }: { next: string; initialError: 
         <label htmlFor="email" className="label">
           Email
         </label>
-        <input id="email" name="email" type="email" autoComplete="email" inputMode="email" required className="input" placeholder="you@firm.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input id="email" name="email" type="email" autoComplete="email" inputMode="email" required className="input input-lg" placeholder="you@firm.com" value={email} onChange={(e) => setEmail(e.target.value)} />
       </div>
       {mode === "password" ? (
         <div>
           <label htmlFor="password" className="label">
             Password
           </label>
-          <input id="password" name="password" type="password" autoComplete="current-password" required className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input id="password" name="password" type="password" autoComplete="current-password" required className="input input-lg" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
       ) : null}
       {state.kind === "error" ? <Notice tone="error">{state.message}</Notice> : null}
-      <Button type="submit" className="w-full" disabled={state.kind === "busy"}>
+      <Button type="submit" size="lg" className="w-full" disabled={state.kind === "busy"}>
         {state.kind === "busy" ? "One moment" : mode === "link" ? "Email me a sign-in link" : "Sign in"}
       </Button>
       {mode === "password" ? (

@@ -3,13 +3,18 @@
 import { useState } from "react";
 import { THEME_COOKIE, type Theme } from "@/lib/theme";
 
+/** Apply and remember the theme for a year on this device. */
+function applyTheme(t: Theme) {
+  document.documentElement.dataset.theme = t;
+  document.cookie = `${THEME_COOKIE}=${t}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
 /** Light / Dark switch. Applies instantly and remembers the choice for a year on this device. */
 export function ThemeToggle({ initial, compact = false }: { initial: Theme; compact?: boolean }) {
   const [theme, setTheme] = useState<Theme>(initial);
   function pick(t: Theme) {
     setTheme(t);
-    document.documentElement.dataset.theme = t;
-    document.cookie = `${THEME_COOKIE}=${t}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    applyTheme(t);
   }
   const opt = (t: Theme, label: string) => (
     <button

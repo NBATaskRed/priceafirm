@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     default: "PriceAFirm",
     template: "%s · PriceAFirm",
   },
-  description: "Independent, confidence-labeled valuations of businesses listed for sale, pooled into crowd intelligence.",
+  description: "Independent, confidence-labeled valuations of businesses listed for sale, pooled into what buyers think.",
 };
 
 export const viewport: Viewport = {

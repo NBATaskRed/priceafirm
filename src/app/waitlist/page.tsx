@@ -16,14 +16,14 @@ export default async function WaitlistPage() {
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="mx-auto flex h-14 w-full max-w-6xl items-center px-4">
+      <header className="mx-auto flex min-h-14 w-full max-w-[1160px] items-center px-5 py-3 md:px-6">
         <Link href="/" aria-label="PriceAFirm home">
           <Logo />
         </Link>
       </header>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 pb-24">
-        <h1 className="text-2xl">PriceAFirm is an invited pilot</h1>
-        <p className="mt-3 text-[15px] text-muted">
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 pb-24">
+        <h1 className="text-[26px] font-bold tracking-[-0.02em]">PriceAFirm is an invited pilot</h1>
+        <p className="mt-3 text-[15px] text-text-soft">
           You are signed in as <span className="text-text">{user.email}</span>, but that address is not on the invite list yet. Your account is saved; when an
           invite is added you will be able to sign in and start valuing businesses right away.
         </p>

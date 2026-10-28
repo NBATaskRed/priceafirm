@@ -13,7 +13,7 @@ export function Card({ children, className = "", as: Tag = "div", pad = true }: 
 /* ----------------------------------------------------------------------------
  * Button (also as link)
  * ------------------------------------------------------------------------- */
-type Variant = "primary" | "secondary" | "ghost";
+type Variant = "primary" | "invert" | "secondary" | "ghost";
 type Size = "sm" | "md" | "lg";
 
 function btnClass(variant: Variant, size: Size, className: string) {
@@ -75,9 +75,58 @@ export function Money({ value, compact = true, className = "" }: { value: number
   );
 }
 
+/** Short money for live copy: $2.65M, $8.7M, $680K (spec 4.2 / 4.3). */
+export function fmtShort(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "Unknown";
+  const a = Math.abs(n);
+  if (a >= 1_000_000) return `$${(n / 1_000_000).toFixed(a >= 10_000_000 ? 1 : 2).replace(/\.?0+$/, "")}M`;
+  if (a >= 1_000) return `$${Math.round(n / 1_000)}K`;
+  return `$${Math.round(n)}`;
+}
+
+/** Points with one decimal and a real minus sign. */
+export function fmtPoints(n: number): string {
+  return n.toFixed(1).replace("-", "\u2212");
+}
+
+/** The header points chip: "3.0 pts", amber on amber tint. */
+export function PointsChip({ balance, href = "/points" }: { balance: number; href?: string }) {
+  const s = fmtPoints(balance);
+  return (
+    <Link href={href} className="points-chip figures" aria-label={`${s} points. Open My points.`}>
+      {s} pts
+    </Link>
+  );
+}
+
+/** Asking, Revenue and the earnings type as three figure tiles (spec 4.2 item 2). */
+export function FactTiles({ snapshot, tone = "surface", className = "" }: { snapshot: Pick<ListingSnapshot, "asking_price" | "revenue" | "earnings" | "earnings_type">; tone?: "surface" | "surface-2"; className?: string }) {
+  const tile = tone === "surface" ? "tile" : "tile-2";
+  const facts = [
+    { label: "Asking", value: snapshot.asking_price },
+    { label: "Revenue", value: snapshot.revenue },
+    { label: earningsLabel(snapshot.earnings_type), value: snapshot.earnings },
+  ];
+  return (
+    <dl className={`grid grid-cols-3 gap-2 ${className}`}>
+      {facts.map((f) => (
+        <div key={f.label} className={tile}>
+          <dt className="tile-label">{f.label}</dt>
+          <dd className="figures mt-0.5 text-[18px] font-bold">{fmtMoney(f.value, { compact: true })}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Short earnings label for tiles and rows. */
+export function earningsLabel(t: ListingSnapshot["earnings_type"]): string {
+  return t === "unknown" ? "Earnings" : EARNINGS_LABEL[t];
+}
+
 /** Signed points, one decimal, with a word so the sign never relies on color. */
 export function Points({ value, words = false, className = "" }: { value: number; words?: boolean; className?: string }) {
-  const s = fmtPts(value).replace("-", "−");
+  const s = fmtPts(value).replace("-", "\u2212");
   const tone = value > 0 ? "text-pos" : value < 0 ? "text-neg" : "text-text";
   return (
     <span className={`figures ${tone} ${className}`}>
@@ -147,19 +196,16 @@ export function valuationsText(n: number): string {
   return `${n} independent valuations`;
 }
 
-export function EvidenceBadge({ nCount, evidence, className = "" }: { nCount: number; evidence?: PublishedStats["evidence"]; className?: string }) {
-  const level: PublishedStats["evidence"] = evidence ?? evidenceFor(nCount);
-  return (
-    <span className={`chip ${className}`}>
-      {nCount <= 0 ? <span>No independent valuations yet</span> : <span className="figures">Based on {nCount} independent {nCount === 1 ? "valuation" : "valuations"}</span>}
-      {nCount > 0 ? (
-        <>
-          <span className="text-muted">&nbsp;·&nbsp;</span>
-          <span>{EVIDENCE_TEXT[level]}</span>
-        </>
-      ) : null}
-    </span>
-  );
+/** The count line next to every buyers' figure (spec 4.5). */
+export function basedOnText(n: number): string {
+  if (n <= 0) return "No independent valuations yet";
+  if (n === 1) return "Based on 1 independent valuation";
+  if (n === 2) return "Based on 2 independent valuations, preliminary";
+  return `Based on ${n} independent valuations`;
+}
+
+export function EvidenceBadge({ nCount, className = "" }: { nCount: number; evidence?: PublishedStats["evidence"]; className?: string }) {
+  return <span className={`chip ${className}`}>{basedOnText(nCount)}</span>;
 }
 
 /* ----------------------------------------------------------------------------
@@ -167,6 +213,17 @@ export function EvidenceBadge({ nCount, evidence, className = "" }: { nCount: nu
  * ------------------------------------------------------------------------- */
 export function locationText(s: Pick<ListingSnapshot, "region" | "state" | "metro">): string {
   return [s.region, s.state, s.metro].filter(Boolean).join(" · ") || "Location not stated";
+}
+
+/** "Tampa Bay, FL": metro and state, for headers and rows. */
+export function placeText(s: Pick<ListingSnapshot, "region" | "state" | "metro">): string {
+  return [s.metro, s.state].filter(Boolean).join(", ") || s.region || "Location not stated";
+}
+
+/** "2 other buyers have valued this so far" (spec 4.2 item 2). */
+export function othersValuedText(n: number): string {
+  if (n <= 0) return "No one has valued this yet";
+  return n === 1 ? "1 other buyer has valued this so far" : `${n} other buyers have valued this so far`;
 }
 
 export function fmtDate(d: string | null | undefined): string {
@@ -242,7 +299,7 @@ export function Notice({ tone = "info", title, children, className = "" }: { ton
           {title}
         </p>
       ) : null}
-      {children ? <div className={`${title ? "mt-1" : ""} text-text/90`}>{children}</div> : null}
+      {children ? <div className={`${title ? "mt-1" : ""} text-text-soft`}>{children}</div> : null}
     </div>
   );
 }
@@ -250,7 +307,7 @@ export function Notice({ tone = "info", title, children, className = "" }: { ton
 export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
     <div className="card card-pad flex flex-col items-start gap-3 border-dashed">
-      <p className="text-base font-semibold">{title}</p>
+      <p className="text-[17px] font-semibold">{title}</p>
       {children ? <div className="text-sm text-muted">{children}</div> : null}
       {action}
     </div>
@@ -259,10 +316,10 @@ export function EmptyState({ title, children, action }: { title: string; childre
 
 export function PageHeader({ title, lede, aside }: { title: string; lede?: ReactNode; aside?: ReactNode }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div className="max-w-2xl">
-        <h1 className="text-2xl sm:text-[1.75rem]">{title}</h1>
-        {lede ? <p className="mt-1.5 text-[15px] text-muted">{lede}</p> : null}
+    <header className="mb-7 flex flex-wrap items-end justify-between gap-5">
+      <div className="max-w-[620px]">
+        <h1 className="text-[26px] font-bold tracking-[-0.02em] md:text-[40px] md:leading-[1.1]">{title}</h1>
+        {lede ? <div className="mt-2.5 text-[15px] leading-relaxed text-text-soft md:text-[17px]">{lede}</div> : null}
       </div>
       {aside}
     </header>
@@ -270,4 +327,4 @@ export function PageHeader({ title, lede, aside }: { title: string; lede?: React
 }
 
 export const BALANCE_SENTENCE = "Your balance may rise or fall as additional independent opinions arrive.";
-export const MODEL_DERIVED = "Model-derived, not an offer or observed price.";
+export const MODEL_DERIVED = "Model estimates from buyers' valuations, not offers.";

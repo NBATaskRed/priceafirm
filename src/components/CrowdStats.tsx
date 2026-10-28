@@ -1,117 +1,76 @@
 import type { CrowdStatsView } from "@/lib/discovery/listings";
-import { MODEL_DERIVED, Money } from "./ui";
+import { basedOnText, fmtShort } from "./ui";
+import { BuyersBand } from "./ValueBand";
 
-function pct(n: number | null): string {
-  return n == null ? "n/a" : `${Math.round(n * 100)}%`;
-}
-function ratio(n: number | null): string {
-  return n == null ? "n/a" : `${n.toFixed(2)}×`;
-}
-
-function disagreementWord(d: number | null): string {
-  if (d == null) return "Needs 2+ opinions";
-  if (d < 0.15) return `Low (${d.toFixed(2)})`;
-  if (d < 0.35) return `Moderate (${d.toFixed(2)})`;
-  return `High (${d.toFixed(2)})`;
-}
-function concentrationWord(c: number | null): string {
-  if (c == null) return "n/a";
-  if (c >= 0.6) return `One voice dominates (${Math.round(c * 100)}%)`;
-  if (c >= 0.35) return `Somewhat concentrated (${Math.round(c * 100)}%)`;
-  return `Spread out (${Math.round(c * 100)}%)`;
+/** "1.23x": two decimals; amber text at or above 1.00x (spec 2, accent-text). */
+export function RatioFigure({ ratio, className = "" }: { ratio: number; className?: string }) {
+  return <span className={`figures ${ratio >= 1 ? "text-accent-text" : "text-text"} ${className}`}>{ratio.toFixed(2)}x</span>;
 }
 
 /**
- * Model-derived crowd statistics. Only ever rendered after exposure (Find deals rows, done page, unlocked).
- * Ask-relative figures appear only when the source permits them.
+ * "What buyers think so far" (spec 4.3): median value, a P10 to P90 band with the ask tick and your
+ * dot, two tiles (x of ask, chance it's worth more than ask) and the count line. Only rendered after
+ * exposure (locked-in page, opened listings).
  */
-export function CrowdStats({ stats }: { stats: CrowdStatsView }) {
-  if (stats.nCount <= 0) {
+export function CrowdStats({
+  stats,
+  you = null,
+  yoursIncluded = false,
+  heading = "What buyers think so far",
+  headingLevel = 2,
+}: {
+  stats: CrowdStatsView;
+  you?: number | null;
+  yoursIncluded?: boolean;
+  heading?: string;
+  headingLevel?: 2 | 3;
+}) {
+  const H = headingLevel === 2 ? "h2" : "h3";
+  if (stats.nCount <= 0 || stats.medianEv == null) {
     return (
-      <div className="text-sm">
-        <p className="font-medium">No independent valuations yet. Ask benchmark only.</p>
+      <section className="flex flex-col gap-2.5">
+        <H className="text-[17px] font-semibold">{heading}</H>
+        <p className="text-[15px] text-muted">No independent valuations yet. The buyers&apos; view appears here as valuations arrive.</p>
         {stats.askingPrice != null ? (
-          <p className="mt-1 text-muted">
-            Asking price <Money value={stats.askingPrice} className="text-text" />.
+          <p className="text-sm text-muted">
+            Asking price <span className="figures font-semibold text-text">{fmtShort(stats.askingPrice)}</span>
           </p>
-        ) : (
-          <p className="mt-1 text-muted">No asking price was listed.</p>
-        )}
-        <p className="mt-2 text-xs text-muted">Be the first to value it from the queue and the pooled view will appear here.</p>
-      </div>
+        ) : null}
+      </section>
     );
   }
 
-  const spreadLo = stats.p10;
-  const spreadHi = stats.p90;
-  const med = stats.medianEv;
-  let medPct = 50;
-  if (spreadLo != null && spreadHi != null && med != null && spreadHi > spreadLo) {
-    medPct = Math.min(96, Math.max(4, ((Math.log(med) - Math.log(spreadLo)) / (Math.log(spreadHi) - Math.log(spreadLo))) * 100));
-  }
-
+  const count = basedOnText(stats.nCount);
   return (
-    <div>
-      <div className="grid gap-5 sm:grid-cols-[1.2fr_1fr]">
-        <div>
-          <p className="text-xs text-muted">Median EV</p>
-          <p className="figures text-3xl font-semibold">
-            <Money value={med} />
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            Mean <Money value={stats.meanEv} className="text-text" />
-          </p>
-          <div className="mt-4">
-            <div className="flex justify-between text-xs text-muted">
-              <span>
-                P10 <Money value={spreadLo} className="text-text" />
-              </span>
-              <span>
-                P90 <Money value={spreadHi} className="text-text" />
-              </span>
-            </div>
-            <div className="relative mt-1.5 h-2 rounded-full bg-surface-2" aria-hidden="true">
-              <span className="absolute inset-y-0 left-0 right-0 rounded-full bg-border-strong" />
-              <span className="absolute top-1/2 h-3.5 w-1 -translate-x-1/2 -translate-y-1/2 rounded bg-accent" style={{ left: `${medPct}%` }} />
-            </div>
-            <p className="mt-1 text-xs text-muted">80% of the pooled distribution lies between P10 and P90.</p>
-          </div>
-        </div>
-
-        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-1">
-          {stats.askingPrice != null ? (
-            <div>
-              <dt className="text-xs text-muted">Asking price</dt>
-              <dd className="figures">
-                <Money value={stats.askingPrice} />
+    <section className="flex flex-col gap-2.5">
+      <H className="text-[17px] font-semibold">{heading}</H>
+      <div className="flex flex-wrap items-baseline gap-x-2.5">
+        <span className="figures text-[40px] font-bold leading-[1.1] tracking-[-0.01em]">{fmtShort(stats.medianEv)}</span>
+        <span className="text-[15px] text-muted">median value</span>
+      </div>
+      <BuyersBand ask={stats.askingPrice} p10={stats.p10} p90={stats.p90} median={stats.medianEv} you={you} />
+      {stats.medianToAsk != null || stats.prAboveAsk != null ? (
+        <dl className="grid grid-cols-2 gap-2">
+          {stats.medianToAsk != null ? (
+            <div className="tile-2 flex flex-col-reverse">
+              <dt className="tile-label mt-0.5">of the asking price</dt>
+              <dd className="text-[18px] font-bold">
+                <RatioFigure ratio={stats.medianToAsk} />
               </dd>
             </div>
           ) : null}
           {stats.prAboveAsk != null ? (
-            <div>
-              <dt className="text-xs text-muted">Pr(EV above ask)</dt>
-              <dd className="figures">{pct(stats.prAboveAsk)}</dd>
+            <div className="tile-2 flex flex-col-reverse">
+              <dt className="tile-label mt-0.5">chance it&apos;s worth more than ask</dt>
+              <dd className="figures text-[18px] font-bold">{Math.round(stats.prAboveAsk * 100)}%</dd>
             </div>
           ) : null}
-          {stats.medianToAsk != null ? (
-            <div>
-              <dt className="text-xs text-muted">Median / ask</dt>
-              <dd className="figures">{ratio(stats.medianToAsk)}</dd>
-            </div>
-          ) : null}
-          <div>
-            <dt className="text-xs text-muted">Disagreement</dt>
-            <dd>{disagreementWord(stats.disagreement)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted">Concentration</dt>
-            <dd>{concentrationWord(stats.concentration)}</dd>
-          </div>
         </dl>
-      </div>
-      <p className="mt-3 text-xs text-muted">
-        {MODEL_DERIVED} Based on {stats.nCount} independent {stats.nCount === 1 ? "valuation" : "valuations"} (effective {stats.nEff.toFixed(1)}) plus a documented baseline.
+      ) : null}
+      <p className="text-[13px] text-muted">
+        {count}
+        {yoursIncluded ? ", yours included" : ""}. Model estimates, not offers.
       </p>
-    </div>
+    </section>
   );
 }

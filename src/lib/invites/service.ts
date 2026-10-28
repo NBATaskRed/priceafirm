@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { onboardListingUrl } from "@/lib/sources";
 import { sendEmail } from "@/lib/mail/send";
 import { valuationRequestEmail } from "@/lib/mail/templates";
-import type { ListingSnapshot } from "@/lib/domain/types";
+import { EARNINGS_LABEL, fmtMoney, type ListingSnapshot } from "@/lib/domain/types";
 import { firstName, hashInviteToken, inviteTtlDays, newInviteToken } from "./token";
 
 export interface IssueInviteInput {
@@ -63,8 +63,12 @@ export async function sendInviteEmail(inviteId: string): Promise<{ status: "sent
   const db = supabaseAdmin();
   const { data: inv } = await db.from("listing_invites").select("id,buyer_email,buyer_name,snapshot_id").eq("id", inviteId).single();
   const invite = inv as { id: string; buyer_email: string; buyer_name: string | null; snapshot_id: string };
-  const { data: snap } = await db.from("listing_snapshots").select("headline,metro,state,region,status").eq("id", invite.snapshot_id).single();
-  const s = snap as Pick<ListingSnapshot, "headline" | "metro" | "state" | "region" | "status">;
+  const { data: snap } = await db
+    .from("listing_snapshots")
+    .select("headline,metro,state,region,status,asking_price,revenue,earnings,earnings_type,source_domain")
+    .eq("id", invite.snapshot_id)
+    .single();
+  const s = snap as Pick<ListingSnapshot, "headline" | "metro" | "state" | "region" | "status" | "asking_price" | "revenue" | "earnings" | "earnings_type" | "source_domain">;
   if (s.status !== "approved") throw new Error("Listing is not approved yet");
 
   const token = newInviteToken();
@@ -74,7 +78,22 @@ export async function sendInviteEmail(inviteId: string): Promise<{ status: "sent
     .update({ token_hash: hashInviteToken(token), expires_at: new Date(Date.now() + days * 86_400_000).toISOString() })
     .eq("id", inviteId);
   const inviteUrl = `${appUrl()}/invite/${token}`;
-  const email = valuationRequestEmail({ firstName: firstName(invite.buyer_name), headline: s.headline, location: locationOf(s), url: inviteUrl, expiresDays: days });
+  const { data: src } = await db.from("source_domains").select("publisher").eq("domain", s.source_domain).maybeSingle();
+  const email = valuationRequestEmail({
+    firstName: firstName(invite.buyer_name),
+    headline: s.headline,
+    location: locationOf(s),
+    metro: s.metro,
+    broker: (src as { publisher: string | null } | null)?.publisher ?? null,
+    url: inviteUrl,
+    expiresDays: days,
+    facts: {
+      ask: fmtMoney(s.asking_price, { compact: true }),
+      revenue: fmtMoney(s.revenue, { compact: true }),
+      earningsLabel: s.earnings_type === "unknown" ? "Earnings" : EARNINGS_LABEL[s.earnings_type],
+      earnings: fmtMoney(s.earnings, { compact: true }),
+    },
+  });
   const res = await sendEmail({ to: invite.buyer_email, kind: "valuation_request", email, relatedInvite: inviteId, redact: [inviteUrl] });
   await db.from("listing_invites").update({ email_status: res.status, email_error: res.error ?? null }).eq("id", inviteId);
   return { status: res.status, inviteUrl, error: res.error };

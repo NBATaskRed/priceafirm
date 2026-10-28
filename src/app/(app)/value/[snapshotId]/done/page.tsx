@@ -1,18 +1,21 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireMember } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadCrowdStats, loadSource } from "@/lib/discovery/listings";
-import { fmtMoney, type ForecastRow, type ListingSnapshot } from "@/lib/domain/types";
+import type { ForecastRow, ListingSnapshot } from "@/lib/domain/types";
 import { CrowdStats } from "@/components/CrowdStats";
-import { BALANCE_SENTENCE, ButtonLink, CONFIDENCE_LABEL, Card, EvidenceBadge, Money, Points, ScoreRange, fmtDate, locationText } from "@/components/ui";
+import { ButtonLink, CONFIDENCE_LABEL, fmtShort, placeText } from "@/components/ui";
 import { RevealUrl } from "@/components/RevealUrl";
-import { assumedRange } from "@/lib/quant/model";
 import { impliedMultiple } from "@/components/ValuationForm";
 
-export const metadata = { title: "Valuation sealed" };
+export const metadata = { title: "Locked in" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function signed(n: number): string {
+  const s = Math.abs(n).toFixed(1);
+  return n > 0.04 ? `+${s}` : n < -0.04 ? `−${s}` : "0.0";
+}
 
 export default async function DonePage({ params }: PageProps<"/value/[snapshotId]/done">) {
   const { snapshotId } = await params;
@@ -37,96 +40,61 @@ export default async function DonePage({ params }: PageProps<"/value/[snapshotId
   ]);
   const score = Number(f.current_score);
   const cap = Number(f.cap);
-  const range = assumedRange(Number(f.value), f.confidence);
-  const multiple = impliedMultiple(Number(f.value), s.earnings, s.earnings_type);
+  const value = Number(f.value);
+  const multiple = impliedMultiple(value, s.earnings, s.earnings_type);
+  const scoreTone = score > 0.04 ? "text-pos" : score < -0.04 ? "text-neg" : "text-text";
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <nav aria-label="Breadcrumb" className="mb-4 text-sm text-muted">
-        <Link href="/value" className="hover:text-text">
-          Value businesses
-        </Link>
-        <span aria-hidden="true"> / </span>
-        <span>{s.headline}</span>
-      </nav>
+    <div className="mx-auto flex max-w-[560px] flex-col gap-[18px]">
+      <section className="flex items-center gap-3.5">
+        <div className="seal flex h-14 w-14 flex-none items-center justify-center rounded-full bg-accent" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <h1 className="text-[24px] font-bold tracking-[-0.015em]">Locked in</h1>
+          <p className="mt-0.5 text-sm text-muted">
+            You said <span className="figures font-bold text-text">{fmtShort(value)}</span>, {CONFIDENCE_LABEL[f.confidence].toLowerCase()} confidence
+            {multiple ? <span className="figures"> ({multiple.replace("= ", "")})</span> : null}
+          </p>
+          <p className="mt-0.5 truncate text-[13px] text-muted">
+            {s.headline} · {placeText(s)}
+          </p>
+        </div>
+      </section>
 
-      <header className="mb-6">
-        <p className="text-sm text-pos">Valuation sealed</p>
-        <h1 className="text-2xl sm:text-3xl">{s.headline}</h1>
-        <p className="mt-1 text-muted">
-          {s.industry} · {locationText(s)} · snapshot <span className="figures">{fmtDate(s.snapshot_date)}</span>
+      <section className="card flex flex-col gap-1.5 p-4">
+        <h2 className="text-sm font-normal text-muted">Your score for this business</h2>
+        <p className={`figures text-[34px] font-bold leading-tight ${scoreTone}`}>{signed(score)}</p>
+        <p className="text-sm leading-[1.45] text-text-soft">
+          {f.voided_at
+            ? "This valuation was voided, so it no longer moves your points."
+            : `It moves up or down as other buyers value this business, anywhere between −${cap.toFixed(1)} and +${cap.toFixed(1)}.`}
         </p>
-      </header>
+      </section>
 
-      <Card className="mb-6">
-        <dl className="grid gap-5 sm:grid-cols-3">
-          <div>
-            <dt className="text-xs text-muted">Your enterprise value</dt>
-            <dd className="figures text-2xl font-semibold">
-              <Money value={Number(f.value)} />
-            </dd>
-            <dd className="text-sm text-muted">
-              {CONFIDENCE_LABEL[f.confidence]} confidence{multiple ? ` · ${multiple.replace("= ", "")}` : ""}
-            </dd>
-            <dd className="figures text-xs text-muted">
-              Assumed range {fmtMoney(range.lo, { compact: true })} to {fmtMoney(range.hi, { compact: true })}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted">Possible score</dt>
-            <dd className="mt-1 text-lg">
-              <ScoreRange cap={cap} />
-            </dd>
-            <dd className="text-xs text-muted">Frozen when you submitted</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted">Your score for this business</dt>
-            <dd className="text-2xl font-semibold">
-              <Points value={score} />
-              <span className="ml-2 text-sm font-normal text-muted">(can change)</span>
-            </dd>
-            <dd className="text-xs text-muted">Submitted {fmtDate(f.created_at)}</dd>
-          </div>
-        </dl>
-        <p className="mt-4 text-sm text-muted">{BALANCE_SENTENCE}</p>
-        {f.rationale ? (
-          <div className="mt-4 border-t border-border pt-3 text-sm">
-            <p className="text-xs text-muted">Your private note</p>
-            <p className="mt-1 whitespace-pre-wrap">{f.rationale}</p>
-          </div>
-        ) : null}
-      </Card>
+      <CrowdStats stats={stats} you={value} yoursIncluded={Boolean(f.counts_toward_independent) && !f.voided_at} />
 
-      <Card className="mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Where the crowd stands now</h2>
-          <EvidenceBadge nCount={stats.nCount} evidence={stats.evidence} />
-        </div>
-        <p className="mt-1 text-sm text-muted">
-          Now that your valuation is sealed, you can see the pooled view for this listing. Based on {stats.nCount} independent {stats.nCount === 1 ? "valuation" : "valuations"},
-          including yours.
-        </p>
-        <div className="mt-4">
-          <CrowdStats stats={stats} />
-        </div>
-        <div className="mt-5 border-t border-border pt-4">
-          <h3 className="text-sm font-semibold">Source listing</h3>
-          <RevealUrl
-            businessId={s.business_id}
-            nInd={stats.nCount}
-            alreadyUnlocked={Boolean(unlock)}
-            selfSubmitted={Boolean(self)}
-            balance={Number(bal ?? 0)}
-            publisher={source?.publisher ?? null}
-            attributionText={source?.attribution_text ?? null}
-          />
-        </div>
-      </Card>
+      {f.rationale ? (
+        <details className="text-sm">
+          <summary className="flex min-h-11 cursor-pointer items-center text-muted hover:text-text">Your private note</summary>
+          <p className="whitespace-pre-wrap text-text-soft">{f.rationale}</p>
+        </details>
+      ) : null}
 
-      <div className="flex flex-wrap gap-3">
-        <ButtonLink href="/value">Value another business</ButtonLink>
-        <ButtonLink href="/points" variant="secondary">
-          My points
+      <div className="flex flex-col gap-2.5 pt-2">
+        <RevealUrl
+          businessId={s.business_id}
+          nInd={stats.nCount}
+          alreadyUnlocked={Boolean(unlock)}
+          selfSubmitted={Boolean(self)}
+          balance={Number(bal ?? 0)}
+          publisher={source?.publisher ?? null}
+          attributionText={source?.attribution_text ?? null}
+        />
+        <ButtonLink href="/value" variant="secondary" size="lg" className="w-full">
+          Value another business
         </ButtonLink>
       </div>
     </div>

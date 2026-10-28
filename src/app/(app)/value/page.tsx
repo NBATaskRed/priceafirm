@@ -2,11 +2,11 @@ import Link from "next/link";
 import { requireMember } from "@/lib/auth/session";
 import { loadApprovedListings, loadUserBusinessState, type ApprovedListing } from "@/lib/discovery/listings";
 import { capFromParticipation } from "@/lib/discovery/question";
-import { EARNINGS_LABEL, type ListingSnapshot } from "@/lib/domain/types";
-import { Card, EmptyState, Money, PageHeader, ScoreRange, fmtDate, locationText, valuationsText } from "@/components/ui";
-import { ValueFilters } from "./ValueFilters";
+import type { ListingSnapshot } from "@/lib/domain/types";
+import { EmptyState, Money, PageHeader, earningsLabel, placeText } from "@/components/ui";
+import { SortControl, ValueFilters } from "./ValueFilters";
 
-export const metadata = { title: "Value Businesses" };
+export const metadata = { title: "Value businesses" };
 
 type BuyerProfile = { states?: string[]; industries?: string[]; minEarnings?: number };
 
@@ -74,46 +74,47 @@ export default async function ValuePage({ searchParams }: PageProps<"/value">) {
   const hasBuyerProfile = Boolean(buyer.states?.length || buyer.industries?.length || buyer.minEarnings);
 
   return (
-    <div>
+    <div className="flex flex-col gap-7">
       <PageHeader
         title="Value businesses"
-        lede="Neutral listing facts only. Submit one enterprise value estimate with your confidence; the possible score range is frozen the moment you submit."
+        lede="Say what a business is worth and earn points when other buyers agree later. The fewer valuations a listing has, the more points are at stake."
+        aside={<SortControl sort={sort} state={fState} industry={fIndustry} minEarnings={fMin ? String(fMin) : ""} />}
       />
 
       <ValueFilters states={states} sort={sort} state={fState} industry={fIndustry} minEarnings={fMin ? String(fMin) : ""} hasBuyerProfile={hasBuyerProfile} />
 
       {eligible.length === 0 ? (
         <EmptyState
-          title={filtered.length === 0 && listings.length > 0 ? "No listings match these filters" : listings.length === 0 ? "No listings are open for valuation yet" : "You have valued or seen every open listing"}
+          title={filtered.length === 0 && listings.length > 0 ? "No listings match these filters" : listings.length === 0 ? "No listings are open for valuation yet" : "You've valued or seen every open listing"}
           action={
             <Link href="/add" className="btn btn-secondary btn-sm">
               Add a listing
             </Link>
           }
         >
-          {listings.length === 0 ? "Listings appear here once a member adds a public broker URL." : "Add a listing URL to open a new valuation question, or come back when new listings arrive."}
+          {listings.length === 0 ? "Listings appear here once a member adds a broker listing URL." : "Add a listing URL to open a new one, or come back when new listings arrive."}
         </EmptyState>
       ) : (
-        <ul className="grid gap-4 md:grid-cols-2">
+        <ul className="flex flex-col border-t border-border">
           {eligible.map((l) => (
-            <ListingCard key={l.snapshot.id} listing={l} />
+            <ListingRow key={l.snapshot.id} listing={l} />
           ))}
         </ul>
       )}
 
+      <p className="text-sm text-muted">Nothing here shows what other buyers think, so valuing stays blind. You&apos;ll see the combined view right after you lock in your number.</p>
+
       {valued.length > 0 ? (
-        <details className="mt-10">
-          <summary className="cursor-pointer text-sm font-medium text-muted hover:text-text">Already valued ({valued.length})</summary>
-          <ul className="mt-4 grid gap-3 md:grid-cols-2">
+        <details>
+          <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-muted hover:text-text">Already valued ({valued.length})</summary>
+          <ul className="mt-2 flex flex-col border-t border-border">
             {valued.map((l) => (
-              <li key={l.snapshot.id} className="card card-pad flex items-center justify-between gap-3 text-sm">
-                <div>
-                  <p className="font-medium">{l.snapshot.headline}</p>
-                  <p className="text-muted">
-                    {l.snapshot.industry} · {locationText(l.snapshot)}
-                  </p>
+              <li key={l.snapshot.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-2 py-3 text-sm">
+                <div className="min-w-0">
+                  <p className="font-semibold">{l.snapshot.headline}</p>
+                  <p className="text-muted">{placeText(l.snapshot)}</p>
                 </div>
-                <Link href={`/value/${mine.valued.get(l.snapshot.business_id) ?? l.snapshot.id}/done`} className="btn btn-ghost btn-sm">
+                <Link href={`/value/${mine.valued.get(l.snapshot.business_id) ?? l.snapshot.id}/done`} className="btn btn-secondary btn-sm">
                   Your valuation
                 </Link>
               </li>
@@ -123,16 +124,14 @@ export default async function ValuePage({ searchParams }: PageProps<"/value">) {
       ) : null}
 
       {exposed.length > 0 ? (
-        <details className="mt-6">
-          <summary className="cursor-pointer text-sm font-medium text-muted hover:text-text">Not eligible, you saw this listing in Find deals ({exposed.length})</summary>
-          <ul className="mt-4 grid gap-3 md:grid-cols-2">
+        <details>
+          <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-muted hover:text-text">Seen in Find deals, can&apos;t earn points ({exposed.length})</summary>
+          <ul className="mt-2 flex flex-col border-t border-border">
             {exposed.map((l) => (
-              <li key={l.snapshot.id} className="card card-pad text-sm">
-                <p className="font-medium">{l.snapshot.headline}</p>
-                <p className="text-muted">
-                  {l.snapshot.industry} · {locationText(l.snapshot)}
-                </p>
-                <p className="mt-1 text-xs text-muted">You saw crowd valuations for this listing, so a scored valuation is not available.</p>
+              <li key={l.snapshot.id} className="border-b border-border px-2 py-3 text-sm">
+                <p className="font-semibold">{l.snapshot.headline}</p>
+                <p className="text-muted">{placeText(l.snapshot)}</p>
+                <p className="mt-1 text-[13px] text-muted">You&apos;ve seen what buyers think of this one, so valuing it can&apos;t earn points.</p>
               </li>
             ))}
           </ul>
@@ -142,59 +141,53 @@ export default async function ValuePage({ searchParams }: PageProps<"/value">) {
   );
 }
 
-function ListingCard({ listing }: { listing: ApprovedListing }) {
+function countText(n: number): string {
+  if (n <= 0) return "No valuations yet";
+  return n === 1 ? "1 valuation so far" : `${n} valuations so far`;
+}
+
+function ListingRow({ listing }: { listing: ApprovedListing }) {
   const s = listing.snapshot;
   const c = capFromParticipation(listing.counts.n_eff);
   return (
-    <Card as="li" pad={false} className="flex flex-col">
-      <Link href={`/value/${s.id}`} className="group flex flex-1 flex-col p-5 no-underline">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold leading-snug group-hover:underline">{s.headline}</h2>
-            <p className="mt-0.5 text-sm text-muted">{s.industry}</p>
-            <p className="text-sm text-muted">{locationText(s)}</p>
-          </div>
-          <div className="text-right">
-            <p className="figures text-xl font-semibold text-accent-text">±{c.toFixed(1)}</p>
-            <p className="text-xs text-muted">possible score</p>
-          </div>
+    <li className="flex flex-wrap items-center gap-x-8 gap-y-4 rounded-[4px] border-b border-border px-2 py-5 hover:bg-surface-2 md:px-4">
+      <div className="min-w-0 flex-[1_1_260px]">
+        <h2 className="text-[19px] font-bold leading-snug">{s.headline}</h2>
+        <p className="mt-1 text-sm text-muted">
+          {placeText(s)} · {s.industry}
+        </p>
+      </div>
+      <dl className="grid flex-[1_1_320px] grid-cols-3 gap-6">
+        <div>
+          <dt className="tile-label">Asking</dt>
+          <dd className="figures mt-0.5 text-[17px] font-bold">
+            <Money value={s.asking_price} />
+          </dd>
         </div>
-
-        <dl className="mt-4 grid grid-cols-4 gap-3">
-          <div>
-            <dt className="text-xs text-muted">Ask</dt>
-            <dd className="figures text-[15px]">
-              <Money value={s.asking_price} />
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted">Revenue</dt>
-            <dd className="figures text-[15px]">
-              <Money value={s.revenue} />
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted">{s.earnings_type === "unknown" ? "Earnings" : EARNINGS_LABEL[s.earnings_type]}</dt>
-            <dd className="figures text-[15px]">
-              <Money value={s.earnings} />
-            </dd>
-            {s.earnings_type === "unknown" && s.earnings != null ? <dd className="text-[11px] text-muted">basis unknown</dd> : null}
-          </div>
-          <div>
-            <dt className="text-xs text-muted">Valuations</dt>
-            <dd className="figures text-[15px]">{listing.counts.n_count}</dd>
-          </div>
-        </dl>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted">
-          <span>
-            Snapshot <span className="figures">{fmtDate(s.snapshot_date)}</span> · {valuationsText(listing.counts.n_count)}
-          </span>
-          <span>
-            Possible score <ScoreRange cap={c} />
-          </span>
+        <div>
+          <dt className="tile-label">Revenue</dt>
+          <dd className="figures mt-0.5 text-[17px] font-bold">
+            <Money value={s.revenue} />
+          </dd>
         </div>
-      </Link>
-    </Card>
+        <div>
+          <dt className="tile-label">{earningsLabel(s.earnings_type)}</dt>
+          <dd className="figures mt-0.5 text-[17px] font-bold">
+            <Money value={s.earnings} />
+          </dd>
+        </div>
+      </dl>
+      <div className="flex flex-[1_0_auto] items-center justify-between gap-5 sm:flex-none">
+        <div className="min-w-[120px] sm:text-right">
+          <p className="figures text-[26px] font-extrabold leading-tight text-accent-text">
+            <span className="sr-only">Points at stake </span>&plusmn;{c.toFixed(1)}
+          </p>
+          <p className="figures text-[13px] text-muted">{countText(listing.counts.n_count)}</p>
+        </div>
+        <Link href={`/value/${s.id}`} className="btn btn-invert" aria-label={`Value it: ${s.headline}, ${placeText(s)}`}>
+          Value it
+        </Link>
+      </div>
+    </li>
   );
 }

@@ -1,26 +1,35 @@
 "use client";
 
+import { useId, useRef } from "react";
 import type { Confidence } from "@/lib/domain/types";
-import { fmtMoney } from "@/lib/domain/types";
 import { assumedRange } from "@/lib/quant/model";
-import { CONFIDENCE_LABEL } from "./ui";
+import { CONFIDENCE_LABEL, fmtShort } from "./ui";
 
-const HINT: Record<Confidence, string> = {
-  low: "A rough read.",
-  medium: "A considered view.",
-  high: "You know this kind of business.",
+const ORDER: Confidence[] = ["low", "medium", "high"];
+
+const TAIL: Record<Confidence, string> = {
+  low: "Small gains, small losses, whatever other buyers say.",
+  medium: "You earn more when later valuations land near yours.",
+  high: "Biggest gains if later valuations land near yours, biggest losses if they don't.",
 };
 
+/** Live copy under the pills (spec 4.2 item 5). */
+export function confidenceCopy(confidence: Confidence | null, estimate: number | null): string {
+  if (!confidence) return "Pick one. It sets the range we assume around your number, not the points at stake.";
+  if (!estimate) return "Type a number to see the range we assume for it.";
+  const r = assumedRange(estimate, confidence);
+  return `${CONFIDENCE_LABEL[confidence]}: we assume roughly ${fmtShort(r.lo)} to ${fmtShort(r.hi)}. ${TAIL[confidence]}`;
+}
+
 /**
- * Confidence choice (design v2.2). The possible score range is the same for every level; confidence
- * sets the system-assumed range around the estimate and therefore how sharply later opinions move
+ * "How sure are you?" Three equal pills in a radio group. Points at stake are the same for every
+ * level; confidence sets the assumed range around the number and how sharply later valuations move
  * the score either way.
  */
 export function ConfidencePicker({
   value,
   onChange,
   estimate,
-  cap,
   name = "confidence",
   disabled = false,
 }: {
@@ -28,56 +37,58 @@ export function ConfidencePicker({
   onChange: (c: Confidence) => void;
   /** Current EV estimate in dollars, or null when nothing typed yet. */
   estimate: number | null;
-  cap: number;
+  /** Unused since spec v1.1 (points at stake sit in their own tile); kept for call-site compatibility. */
+  cap?: number;
   name?: string;
   disabled?: boolean;
 }) {
-  const order: Confidence[] = ["low", "medium", "high"];
+  const id = useId();
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const focusIdx = value ? ORDER.indexOf(value) : 0;
+
+  function move(from: number, delta: number) {
+    const next = (from + delta + ORDER.length) % ORDER.length;
+    onChange(ORDER[next]);
+    refs.current[next]?.focus();
+  }
+
   return (
-    <fieldset disabled={disabled}>
-      <legend className="label">Confidence</legend>
-      <div className="grid gap-2 sm:grid-cols-3" role="radiogroup">
-        {order.map((c) => {
-          const selected = value === c;
-          const r = estimate ? assumedRange(estimate, c) : null;
-          return (
-            <label key={c} className="conf-option relative" data-selected={selected ? "true" : "false"}>
-              <input type="radio" name={name} value={c} checked={selected} onChange={() => onChange(c)} />
-              <span className="flex items-baseline justify-between gap-2">
-                <span className="font-semibold">{CONFIDENCE_LABEL[c]}</span>
-                {r ? (
-                  <span className="figures text-xs text-muted">
-                    {fmtMoney(r.lo, { compact: true })} to {fmtMoney(r.hi, { compact: true })}
-                  </span>
-                ) : null}
-              </span>
-              <span className="mt-1 block text-xs text-muted">{HINT[c]}</span>
-            </label>
-          );
-        })}
+    <div className="flex flex-col gap-2.5">
+      <span id={`${id}-label`} className="text-[17px] font-semibold">
+        How sure are you?
+      </span>
+      <div role="radiogroup" aria-labelledby={`${id}-label`} aria-describedby={`${id}-copy`} className="grid grid-cols-3 gap-2">
+        {ORDER.map((c, i) => (
+          <button
+            key={c}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
+            type="button"
+            role="radio"
+            aria-checked={value === c}
+            tabIndex={i === focusIdx ? 0 : -1}
+            disabled={disabled}
+            className="pill"
+            onClick={() => onChange(c)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                move(i, 1);
+              } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                move(i, -1);
+              }
+            }}
+          >
+            {CONFIDENCE_LABEL[c]}
+          </button>
+        ))}
       </div>
-      <p className="mt-2 text-sm" aria-live="polite">
-        {value ? (
-          <>
-            <span className="font-medium">{CONFIDENCE_LABEL[value]}:</span>{" "}
-            {estimate ? (
-              <>
-                assumed range roughly <span className="figures">{fmtMoney(assumedRange(estimate, value).lo, { compact: true })}</span> to{" "}
-                <span className="figures">{fmtMoney(assumedRange(estimate, value).hi, { compact: true })}</span> (system-assumed).{" "}
-              </>
-            ) : (
-              <>enter your estimate to see the system-assumed range. </>
-            )}
-            Earns more when later independent valuations land near yours, loses more when they don&apos;t. Possible score unchanged:{" "}
-            <span className="figures">
-              &minus;{cap.toFixed(1)} to +{cap.toFixed(1)}
-            </span>
-            .
-          </>
-        ) : (
-          <span className="text-muted">Pick a confidence. It changes the assumed range around your number, not the possible score.</span>
-        )}
+      <input type="hidden" name={name} value={value ?? ""} />
+      <p id={`${id}-copy`} className="text-sm leading-[1.45] text-text-soft" aria-live="polite">
+        {confidenceCopy(value, estimate)}
       </p>
-    </fieldset>
+    </div>
   );
 }

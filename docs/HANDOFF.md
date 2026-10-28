@@ -26,6 +26,18 @@ Spec of record: `docs/DESIGN.md`. Working rules for agents: `CLAUDE.md`.
 - **Vercel** project `priceafirm` (prj_03QUn7VjLqFo4nlXDshN4SyMUrKU, team next-bridge-advisors), Node 24.
   Env already set: SESSION_SECRET, CRON_SECRET, ADMIN_EMAILS, INVITE_ONLY=1, SCORING_MODE=shadow, APP_URL.
 
+## UX spec v1.1 implemented (Oct 28, 2026)
+- All screens follow `docs/UX_SPEC.md` v1.1: light default, dark via the `paf_theme` cookie (account menu and
+  Account page). Tokens only in components; shared classes in `globals.css` (`.btn-primary/-invert/-secondary`,
+  `.tile`, `.points-chip`, `.seg`, `.pill`, `.ev-wrap`, `.band-*`, `.seal`).
+- New `src/components/ValueBand.tsx` (form band and the locked-in buyers' band). `ConfidencePicker` is a pill
+  radiogroup with live copy; `EvInput` in `MoneyInput.tsx`; `StakeTile` in `ValuationForm.tsx`.
+- Email (`src/lib/mail/templates.ts`) has the spec 4.1 copy and an optional fact strip; `sendInviteEmail`
+  passes facts, metro and the source publisher as the broker name.
+- Kept, quietly styled, though the drawings omit them: the private note ("Add a private note"), the
+  valuation assumptions disclosure, Find deals "Valuations at least" filter and example queries, the
+  "Your valuations" list on My points.
+
 ## Automated valuation requests (added Oct 22, design v2.3 Section 13)
 - `POST /api/invites` (bearer INVITE_API_SECRET, already set in Vercel): buyer name, email, listing URL ->
   onboard URL if new (held for Admin > Review when facts are incomplete; approval sends held emails) ->

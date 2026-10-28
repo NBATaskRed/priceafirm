@@ -3,10 +3,10 @@ import { requireMember } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadCrowdStats, loadSourceMap } from "@/lib/discovery/listings";
 import type { ListingSnapshot } from "@/lib/domain/types";
-import { Card, EmptyState, EvidenceBadge, FactsGrid, PageHeader, fmtDate, locationText } from "@/components/ui";
+import { Card, EmptyState, FactTiles, PageHeader, fmtDate, placeText } from "@/components/ui";
 import { CrowdStats } from "@/components/CrowdStats";
 
-export const metadata = { title: "My Unlocked Listings" };
+export const metadata = { title: "Opened listings" };
 
 type UnlockRow = { id: string; business_id: string; snapshot_id: string; charged: boolean; created_at: string };
 type SourceRow = { snapshot_id: string; source_url: string; broker_name: string | null };
@@ -21,16 +21,16 @@ export default async function UnlockedPage() {
   if (!unlocks.length) {
     return (
       <div className="mx-auto max-w-3xl">
-        <PageHeader title="My unlocked listings" lede="Every source URL you have revealed, with the facts and crowd view as they stand now." />
+        <PageHeader title="Opened listings" lede="Every broker listing you've opened, with the facts and what buyers think as it stands now." />
         <EmptyState
-          title="No unlocked listings yet"
+          title="No opened listings yet"
           action={
             <Link href="/deals" className="btn btn-primary btn-sm">
               Find deals
             </Link>
           }
         >
-          Search in Find deals, then reveal a listing&apos;s source URL: free below 3 independent valuations, 1 point from 3 on.
+          Find a deal, then choose See the broker listing. It&apos;s free below 3 valuations and 1 point from 3 on.
         </EmptyState>
       </div>
     );
@@ -60,8 +60,8 @@ export default async function UnlockedPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="My unlocked listings" lede="Every source URL you have revealed, with the facts and crowd view as they stand now." />
-      <ul className="space-y-5">
+      <PageHeader title="Opened listings" lede="Every broker listing you've opened, with the facts and what buyers think as it stands now." />
+      <ul className="flex flex-col gap-4">
         {items.map((it) => {
           if (!it) return null;
           const { u, s, src, stats, source } = it;
@@ -69,39 +69,34 @@ export default async function UnlockedPage() {
           return (
             <Card as="li" key={u.id}>
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold">{s.headline}</h2>
-                  <p className="text-sm text-muted">
-                    {s.industry} · {locationText(s)} · snapshot <span className="figures">{fmtDate(s.snapshot_date)}</span>
+                <div className="min-w-0">
+                  <h2 className="text-[19px] font-bold leading-snug">{s.headline}</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    {placeText(s)} · {s.industry} · facts as of <span className="figures">{fmtDate(s.snapshot_date)}</span>
                   </p>
                 </div>
-                <span className="chip">{u.charged ? "Charged 1 point" : "Free"} · {fmtDate(u.created_at)}</span>
+                <span className="chip">
+                  {u.charged ? "1 point used" : "Free"} · <span className="figures">&nbsp;{fmtDate(u.created_at)}</span>
+                </span>
               </div>
 
-              <div className="mt-4">
-                <FactsGrid snapshot={s} dense />
-              </div>
+              <FactTiles snapshot={s} tone="surface-2" className="mt-4" />
 
               <div className="mt-5 border-t border-border pt-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold">Crowd view</h3>
-                  <EvidenceBadge nCount={stats.nCount} evidence={stats.evidence} />
-                </div>
-                <div className="mt-3">
-                  <CrowdStats stats={stats} />
-                </div>
+                <CrowdStats stats={stats} headingLevel={3} />
               </div>
 
               <div className="mt-5 border-t border-border pt-4">
                 {src ? (
                   <div className="flex flex-wrap items-center gap-3">
-                    <a href={src.source_url} target="_blank" rel="noopener noreferrer nofollow" className="btn btn-primary btn-sm">
-                      Open listing{host ? ` on ${host}` : ""}
+                    <a href={src.source_url} target="_blank" rel="noopener noreferrer nofollow" className="btn btn-secondary">
+                      Open broker listing
                     </a>
-                    <span className="text-sm text-muted">{src.broker_name ?? source?.publisher ?? s.source_domain}</span>
+                    {host ? <span className="text-sm text-muted">{host}</span> : null}
+                    <span className="text-sm text-muted">· {src.broker_name ?? source?.publisher ?? s.source_domain}</span>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted">The listing URL is no longer available from the source.</p>
+                  <p className="text-sm text-muted">The broker listing is no longer available.</p>
                 )}
                 {src ? <p className="mt-2 break-all text-xs text-muted">{src.source_url}</p> : null}
                 {source?.attribution_text ? <p className="mt-1 text-xs text-muted">{source.attribution_text}</p> : null}

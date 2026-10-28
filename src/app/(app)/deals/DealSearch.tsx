@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { confirmDealsGateAction, searchDealsAction, type DealRow, type SearchDealsResult } from "@/lib/actions/deals";
-import { EARNINGS_LABEL } from "@/lib/domain/types";
-import { Button, Card, EVIDENCE_TEXT, EmptyState, MODEL_DERIVED, Money, Notice, fmtDate } from "@/components/ui";
+import { fmtMoney } from "@/lib/domain/types";
+import { Button, EmptyState, MODEL_DERIVED, Notice, basedOnText, earningsLabel, fmtShort } from "@/components/ui";
+import { RatioFigure } from "@/components/CrowdStats";
 import { RevealUrl } from "@/components/RevealUrl";
 
 const EXAMPLES = ["HVAC or plumbing in Florida under $4M with SDE over $500K", "B2B services in the Southeast, EBITDA above $1M", "Manufacturing in NC or GA"];
@@ -25,15 +26,17 @@ export function DealSearch({ gateConfirmed: initialGate }: { gateConfirmed: bool
 
   if (!gate) {
     return (
-      <Card>
-        <h2 className="text-xl">Before you search</h2>
-        <p className="mt-3 text-[15px]">
-          Listings here include crowd valuations. Any listing you see here can no longer earn you points. If you want to value a listing first, use Value
-          Businesses.
+      <section className="mx-auto flex max-w-[640px] flex-col gap-5 py-10 md:py-20" aria-labelledby="gate-title">
+        <h1 id="gate-title" className="text-[28px] font-bold leading-[1.15] tracking-[-0.02em] md:text-[36px]">
+          Before you look
+        </h1>
+        <p className="text-[17px] leading-[1.55] text-text-soft md:text-[18px]">
+          Listings here show what other buyers think they&apos;re worth. Once you&apos;ve seen a listing here, valuing it can&apos;t earn you points.
         </p>
-        <p className="mt-2 text-sm text-muted">Searching is free and never changes your balance. This notice appears once per session.</p>
-        <div className="mt-5 flex flex-wrap gap-3">
+        <p className="text-base leading-[1.55] text-muted">Want points and the deal? Value it first in Value businesses. You&apos;ll see the buyers&apos; view right after.</p>
+        <div className="mt-2 flex flex-wrap gap-3">
           <Button
+            size="lg"
             disabled={pending}
             onClick={() =>
               start(async () => {
@@ -42,123 +45,116 @@ export function DealSearch({ gateConfirmed: initialGate }: { gateConfirmed: bool
               })
             }
           >
-            I understand, show me deals
+            Show me deals
           </Button>
-          <Link href="/value" className="btn btn-secondary">
+          <Link href="/value" className="btn btn-secondary btn-lg">
             Value businesses first
           </Link>
         </div>
-      </Card>
+      </section>
     );
   }
 
   return (
-    <div>
+    <div className="flex flex-col gap-[22px]">
+      <h1 className="text-[26px] font-bold leading-[1.1] tracking-[-0.02em] md:text-[40px]">Find deals</h1>
       <form
-        className="card card-pad"
+        role="search"
+        className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (text.trim()) run(text, 1);
         }}
       >
-        <label htmlFor="deal-query" className="label">
-          What are you looking for?
+        <label htmlFor="deal-query" className="text-[15px] text-muted">
+          Describe what you&apos;re looking for
         </label>
-        <textarea
-          id="deal-query"
-          className="input text-base"
-          rows={2}
-          maxLength={400}
-          placeholder="e.g. HVAC or plumbing in Florida under $4M with SDE over $500K"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (text.trim()) run(text, 1);
-            }
-          }}
-        />
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <Button type="submit" disabled={pending || !text.trim()}>
+        <div className="flex flex-wrap gap-2.5">
+          <input
+            id="deal-query"
+            className="input input-lg min-w-0 flex-[1_1_420px]"
+            maxLength={400}
+            autoComplete="off"
+            placeholder="e.g. B2B services in Georgia or Florida, SDE at least $300K, under $5M"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <Button type="submit" variant="invert" size="lg" disabled={pending || !text.trim()}>
             {pending ? "Searching" : "Search"}
           </Button>
-          <label className="block">
-            <span className="label">Min valuations</span>
-            <select
-              className="input w-36 py-1.5"
-              value={minValuations}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                setMinValuations(v);
-                if (result?.status === "ok" && text.trim()) run(text, 1, v);
-              }}
-            >
-              <option value={0}>Any</option>
-              <option value={1}>1 or more</option>
-              <option value={3}>3 or more</option>
-              <option value={5}>5 or more</option>
-              <option value={10}>10 or more</option>
-            </select>
-          </label>
-          <span className="pb-2 text-xs text-muted">Every listing shown here ends your eligibility to earn points on it.</span>
         </div>
+        {result?.status === "ok" && result.chips.length ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] text-muted">We read that as</span>
+            {result.chips.map((c) => (
+              <span key={c} className="chip">
+                {c}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {!result ? (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] text-muted">Try</span>
             {EXAMPLES.map((ex) => (
-              <button key={ex} type="button" className="chip hover:border-accent" onClick={() => run(ex, 1)}>
+              <button key={ex} type="button" className="chip hover:border-text" onClick={() => run(ex, 1)}>
                 {ex}
               </button>
             ))}
           </div>
         ) : null}
+        <div className="flex items-center gap-2">
+          <label htmlFor="deal-minv" className="text-[13px] text-muted">
+            Valuations at least
+          </label>
+          <select
+            id="deal-minv"
+            className="input w-36"
+            value={minValuations}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setMinValuations(v);
+              if (result?.status === "ok" && text.trim()) run(text, 1, v);
+            }}
+          >
+            <option value={0}>Any</option>
+            <option value={1}>1 or more</option>
+            <option value={3}>3 or more</option>
+            <option value={5}>5 or more</option>
+            <option value={10}>10 or more</option>
+          </select>
+        </div>
       </form>
 
       {result && result.status === "gate_required" ? (
-        <Notice tone="warn" className="mt-4">
+        <Notice tone="warn">
           {result.message}{" "}
           <button type="button" className="underline" onClick={() => setGate(false)}>
-            Show the notice
+            Show the note
           </button>
         </Notice>
       ) : null}
-      {result && (result.status === "rate_limited" || result.status === "invalid") ? (
-        <Notice tone="error" className="mt-4">
-          {result.message}
-        </Notice>
-      ) : null}
+      {result && (result.status === "rate_limited" || result.status === "invalid") ? <Notice tone="error">{result.message}</Notice> : null}
 
       {result && result.status === "ok" ? (
-        <section className="mt-6" aria-live="polite">
-          {result.chips.length ? (
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted">Interpreted as</span>
-              {result.chips.map((c) => (
-                <span key={c} className="chip">
-                  {c}
-                </span>
-              ))}
-            </div>
-          ) : null}
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-lg font-semibold">
-              <span className="figures">{result.count}</span> {result.count === 1 ? "listing matches" : "listings match"}
-            </h2>
-            <span className="text-xs text-muted">{MODEL_DERIVED}</span>
+        <section className="flex flex-col gap-[22px]" aria-live="polite" aria-label="Results">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <p className="text-base text-text-soft">
+              <span className="figures">{result.count}</span> {result.count === 1 ? "match" : "matches"}, best value for the price first
+            </p>
+            <p className="text-sm text-muted">{MODEL_DERIVED.replace(/\.$/, "")}</p>
           </div>
 
           {result.rows.length === 0 ? (
-            <div className="mt-4">
-              <EmptyState title="Nothing matches yet">
-                Try fewer constraints or a lower minimum valuation count, or{" "}
-                <Link href="/add" className="underline">
-                  add a listing
-                </Link>{" "}
-                you have found elsewhere.
-              </EmptyState>
-            </div>
+            <EmptyState title="Nothing matches yet">
+              Try fewer constraints or a lower valuation count, or{" "}
+              <Link href="/add" className="underline">
+                add a listing
+              </Link>{" "}
+              you found elsewhere.
+            </EmptyState>
           ) : (
-            <ol className="mt-4 space-y-3">
+            <ol className="flex flex-col gap-3">
               {result.rows.map((row) => (
                 <DealRowCard key={row.snapshotId} row={row} balance={result.balance} />
               ))}
@@ -166,7 +162,7 @@ export function DealSearch({ gateConfirmed: initialGate }: { gateConfirmed: bool
           )}
 
           {result.pages > 1 ? (
-            <nav aria-label="Pages" className="mt-5 flex items-center justify-between text-sm">
+            <nav aria-label="Pages" className="flex items-center justify-between text-sm">
               <Button variant="secondary" size="sm" disabled={pending || result.page <= 1} onClick={() => run(text, result.page - 1)}>
                 Previous
               </Button>
@@ -184,62 +180,63 @@ export function DealSearch({ gateConfirmed: initialGate }: { gateConfirmed: bool
   );
 }
 
+function place(row: DealRow): string {
+  const parts = row.location.split(" · ");
+  // location is region · state · metro; show "metro, ST" like other screens.
+  const metro = parts.length >= 3 ? parts[parts.length - 1] : null;
+  return metro && row.state ? `${metro}, ${row.state}` : row.location;
+}
+
 function DealRowCard({ row, balance }: { row: DealRow; balance: number }) {
+  const facts = [
+    `Ask ${fmtMoney(row.askingPrice, { compact: true })}`,
+    `Revenue ${fmtMoney(row.revenue, { compact: true })}`,
+    `${earningsLabel(row.earningsType)} ${fmtMoney(row.earnings, { compact: true })}`,
+  ];
   return (
-    <li className="card card-pad">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-lg font-semibold leading-snug">{row.headline}</h3>
-          <p className="text-sm text-muted">
-            {row.industry} · {row.location} · snapshot <span className="figures">{fmtDate(row.snapshotDate)}</span>
-          </p>
-        </div>
-        <span className="chip">{row.nInd > 0 ? `Based on ${row.nInd} independent ${row.nInd === 1 ? "valuation" : "valuations"}` : "No independent valuations yet"}</span>
+    <li className="card flex flex-wrap items-center gap-x-9 gap-y-[18px] px-[22px] py-5">
+      <div className="min-w-0 flex-[1_1_240px]">
+        <h2 className="text-[19px] font-bold leading-snug">{row.headline}</h2>
+        <p className="mt-1 text-sm text-muted">
+          {place(row)} · {row.industry}
+        </p>
+        <p className="figures mt-2.5 flex flex-wrap gap-x-4 text-sm text-text-soft">
+          {facts.map((f) => (
+            <span key={f}>{f}</span>
+          ))}
+        </p>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
-        <div>
-          <dt className="text-xs text-muted">Ask</dt>
-          <dd className="figures">
-            <Money value={row.askingPrice} />
-          </dd>
+      {row.nInd > 0 ? (
+        <div className="flex flex-[1_1_300px] flex-col gap-2">
+          {row.medianToAsk != null ? (
+            <div className="flex flex-wrap items-baseline gap-x-2.5">
+              <RatioFigure ratio={row.medianToAsk} className="text-[32px] font-extrabold leading-tight" />
+              <span className="text-sm text-muted">buyers&apos; value vs. asking price</span>
+            </div>
+          ) : row.medianEv != null ? (
+            <div className="flex flex-wrap items-baseline gap-x-2.5">
+              <span className="figures text-[32px] font-extrabold leading-tight">{fmtShort(row.medianEv)}</span>
+              <span className="text-sm text-muted">buyers&apos; median value</span>
+            </div>
+          ) : null}
+          {row.prAboveAsk != null ? (
+            <div className="flex items-center gap-2.5">
+              <div aria-hidden="true" className="h-1.5 flex-1 overflow-hidden rounded-[3px] bg-track">
+                <div className="h-1.5 rounded-[3px] bg-text" style={{ width: `${Math.round(row.prAboveAsk * 100)}%` }} />
+              </div>
+              <span className="whitespace-nowrap text-sm text-text-soft">
+                <span className="figures">{Math.round(row.prAboveAsk * 100)}%</span> chance it is worth more than ask
+              </span>
+            </div>
+          ) : null}
+          <span className="text-[13px] text-muted">{basedOnText(row.nInd)}</span>
         </div>
-        <div>
-          <dt className="text-xs text-muted">Revenue</dt>
-          <dd className="figures">
-            <Money value={row.revenue} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">{row.earningsType === "unknown" ? "Earnings" : EARNINGS_LABEL[row.earningsType]}</dt>
-          <dd className="figures">
-            <Money value={row.earnings} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">Crowd median EV</dt>
-          <dd className="figures">
-            {row.medianEv != null ? (
-              <>
-                <Money value={row.medianEv} />
-                {row.medianToAsk != null ? <span className="text-muted"> · {row.medianToAsk.toFixed(2)}× ask</span> : null}
-              </>
-            ) : (
-              <span className="text-muted">n/a</span>
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">Pr(EV above ask)</dt>
-          <dd className="figures">{row.prAboveAsk != null ? `${Math.round(row.prAboveAsk * 100)}%` : <span className="text-muted">n/a</span>}</dd>
-        </div>
-      </dl>
-      <p className="mt-2 text-xs text-muted">
-        {EVIDENCE_TEXT[row.evidence]}
-        {row.nInd > 0 ? ". Model-derived, not an offer or observed price." : ". Ranked by fit to your buyer profile."}
-      </p>
+      ) : (
+        <p className="flex-[1_1_300px] text-[15px] text-muted">No independent valuations yet. Value it first and you&apos;ll see the buyers&apos; view as it forms.</p>
+      )}
 
-      <div className="border-t border-border pt-1">
+      <div className="flex-[0_0_auto] max-sm:w-full">
         <RevealUrl
           businessId={row.businessId}
           nInd={row.nInd}
@@ -248,7 +245,7 @@ function DealRowCard({ row, balance }: { row: DealRow; balance: number }) {
           balance={balance}
           publisher={row.publisher}
           attributionText={row.attributionText}
-          size="sm"
+          layout="row"
         />
       </div>
     </li>

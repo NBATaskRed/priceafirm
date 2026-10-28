@@ -37,14 +37,38 @@ describe("invite request schema", () => {
 });
 
 describe("valuation request email", () => {
-  const e = valuationRequestEmail({ firstName: "Jane", headline: "HVAC services", location: "Tampa Bay, FL", url: "https://app.example/invite/abc", expiresDays: 30 });
+  const e = valuationRequestEmail({
+    firstName: "Jane",
+    headline: "HVAC services",
+    location: "Tampa Bay, FL",
+    metro: "Tampa Bay",
+    broker: "Synergy Business Brokers",
+    url: "https://app.example/invite/abc",
+    expiresDays: 30,
+    facts: { ask: "$2.9M", revenue: "$3.2M", earningsLabel: "SDE", earnings: "$680K" },
+  });
   it("is short, personal, links once, and uses no em dashes", () => {
     expect(e.subject).toBe("What is HVAC services (Tampa Bay, FL) worth to you?");
     expect(e.text).toContain("Hi Jane,");
+    expect(e.text).toContain("You've had the materials on HVAC services in Tampa Bay for a couple of weeks. What do you think it's worth?");
+    expect(e.text).toContain("One number and how sure you are. Under a minute. Your number stays private; other buyers only see the combined view.");
+    expect(e.text).toContain("The button signs you in, no password needed. You'll start with 3 points, and good calls earn more.");
+    expect(e.text).toContain("The link works for 30 days.");
+    expect(e.text).toContain("you requested materials on this listing from Synergy Business Brokers.");
     expect(e.text).toContain("https://app.example/invite/abc");
     expect(e.html).toContain('href="https://app.example/invite/abc"');
-    for (const s of [e.subject, e.text, e.html]) expect(s).not.toMatch(/—/);
-    expect(e.text.split(/\s+/).length).toBeLessThan(120);
+    expect(e.html.match(/href=/g)).toHaveLength(1);
+    expect(e.html).toContain(">Value this business</a>");
+    for (const s of [e.subject, e.text, e.html]) expect(s).not.toMatch(/\u2014/);
+    expect(e.text.split(/\s+/).length).toBeLessThan(150);
+  });
+  it("renders the fact strip only when facts are given", () => {
+    for (const v of ["Asking", "$2.9M", "Revenue", "$3.2M", "SDE", "$680K"]) expect(e.html).toContain(v);
+    expect(e.text).toContain("Asking $2.9M · Revenue $3.2M · SDE $680K");
+    const bare = valuationRequestEmail({ firstName: "Jane", headline: "HVAC services", location: "Tampa Bay, FL", url: "https://x", expiresDays: 30 });
+    expect(bare.html).not.toContain("Asking");
+    expect(bare.text).not.toContain("Asking");
+    expect(bare.text).toContain("in Tampa Bay, FL for a couple of weeks");
   });
   it("escapes HTML in listing names", () => {
     const x = valuationRequestEmail({ firstName: null, headline: "<b>A&B</b>", location: null, url: "https://x", expiresDays: 7 });

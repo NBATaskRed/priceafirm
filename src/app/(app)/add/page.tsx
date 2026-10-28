@@ -2,7 +2,7 @@ import { hasAcceptedTerms, requireMember } from "@/lib/auth/session";
 import { PageHeader } from "@/components/ui";
 import { AddListingFlow } from "./AddListingFlow";
 
-export const metadata = { title: "Add a Listing" };
+export const metadata = { title: "Add a listing" };
 
 export default async function AddPage() {
   const { profile } = await requireMember();
@@ -10,7 +10,7 @@ export default async function AddPage() {
     <div className="mx-auto max-w-3xl">
       <PageHeader
         title="Add a listing"
-        lede="Paste the URL of a business for sale on a cleared source. We check the source before fetching anything, pull the neutral facts, and offer you the first valuation. Submitting a URL alone earns nothing; the valuation is what earns points."
+        lede="Paste a broker listing for a business for sale. We check the source before fetching anything, pull the plain facts, and you get the first valuation, where the most points are at stake."
       />
       <AddListingFlow needsTerms={!hasAcceptedTerms(profile)} />
     </div>

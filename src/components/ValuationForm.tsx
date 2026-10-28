@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { impliedMultiple as impliedMultipleBase, type Confidence, type EarningsType } from "@/lib/domain/types";
 import { submitForecastAction, type SubmitForecastResult } from "@/lib/actions/forecast";
-import { Button, Notice, ScoreRange } from "./ui";
+import { Button, Notice } from "./ui";
 import { ConfidencePicker } from "./ConfidencePicker";
-import { MoneyInput } from "./MoneyInput";
+import { EvInput } from "./MoneyInput";
 import { TermsCheckbox } from "./TermsCheckbox";
+import { ValueBand } from "./ValueBand";
 
 export function impliedMultiple(value: number | null, earnings: number | null, earningsType: EarningsType): string | null {
   if (!value) return null;
@@ -15,11 +16,36 @@ export function impliedMultiple(value: number | null, earnings: number | null, e
   return m ? `= ${m}` : null;
 }
 
+/** "Points at stake ±C" (spec 4.2 item 6), or the changed-stake line after bounds_changed. */
+export function StakeTile({ cap, changed = false }: { cap: number; changed?: boolean }) {
+  const c = `±${cap.toFixed(1)}`;
+  if (changed) {
+    return (
+      <div role="status" className="tile flex items-baseline justify-between gap-3 border border-accent px-3.5 py-3">
+        <span className="text-sm text-text-soft">
+          Points at stake changed to <span className="figures font-bold text-text">{c}</span> because another buyer just valued this
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="tile flex items-baseline justify-between gap-3 px-3.5 py-3">
+      <span className="text-sm text-muted">Points at stake</span>
+      <span className="figures text-[20px] font-bold">{c}</span>
+    </div>
+  );
+}
+
+/**
+ * The valuation form (spec 4.2 items 3 to 6): figure input with live multiple, value band, "How sure
+ * are you?" pills with live copy, points at stake and "Lock in my valuation". The server action
+ * contract (snapshotId, value, confidence, contractToken, rationale, acceptTerms) is unchanged.
+ */
 export function ValuationForm({
   snapshotId,
   contractToken: initialToken,
   cap: initialCap,
-  nInd: initialNInd,
+  ask = null,
   earnings,
   earningsType,
   needsTerms,
@@ -29,7 +55,10 @@ export function ValuationForm({
   snapshotId: string;
   contractToken: string;
   cap: number;
+  /** Independent valuations on file; shown by the page header, kept for call-site compatibility. */
   nInd: number;
+  /** Asking price, for the value band. */
+  ask?: number | null;
   earnings: number | null;
   earningsType: EarningsType;
   needsTerms: boolean;
@@ -38,13 +67,13 @@ export function ValuationForm({
   onSealed?: (r: Extract<SubmitForecastResult, { status: "sealed" }>) => void;
 }) {
   const router = useRouter();
+  const id = useId();
   const [value, setValue] = useState("");
   const [confidence, setConfidence] = useState<Confidence | null>(null);
   const [rationale, setRationale] = useState("");
   const [terms, setTerms] = useState(false);
   const [token, setToken] = useState(initialToken);
   const [cap, setCap] = useState(initialCap);
-  const [nInd, setNInd] = useState(initialNInd);
   const [pending, start] = useTransition();
   const [notice, setNotice] = useState<{ tone: "error" | "warn" | "info"; title?: string; body: string } | null>(null);
   const [needsReconfirm, setNeedsReconfirm] = useState(false);
@@ -75,9 +104,7 @@ export function ValuationForm({
         case "bounds_changed":
           setToken(r.contractToken);
           setCap(r.cap);
-          setNInd(r.nInd);
           setNeedsReconfirm(true);
-          setNotice({ tone: "warn", title: "The possible score range changed", body: r.message });
           return;
         case "terms_required":
           setNotice({ tone: "warn", body: r.message });
@@ -90,64 +117,50 @@ export function ValuationForm({
 
   return (
     <form
-      className="space-y-5"
+      className="flex flex-col gap-[18px]"
       onSubmit={(e) => {
         e.preventDefault();
         if (canSubmit) submit(e.currentTarget);
       }}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-        <span className="text-muted">
-          Independent valuations on file: <span className="figures text-text">{nInd}</span>
-        </span>
-        <span className="text-muted">
-          Possible score: <ScoreRange cap={cap} />
-        </span>
-      </div>
+      <input type="hidden" name="snapshotId" value={snapshotId} />
+      <input type="hidden" name="contractToken" value={token} />
 
-      <MoneyInput
-        label="Your enterprise value estimate"
-        name="value"
+      <EvInput
+        id={`ev-${id}`}
+        label="What do you think it's worth?"
         value={value}
-        onChange={setValue}
-        required
+        onChange={(v) => {
+          setValue(v);
+        }}
+        multiple={multiple}
         autoFocus={!compact}
-        hint={multiple ? `${multiple} · cash-free, debt-free enterprise value in whole US dollars.` : "Cash-free, debt-free enterprise value in whole US dollars. One number, your central estimate."}
       />
 
-      <ConfidencePicker value={confidence} onChange={(c) => setConfidence(c)} estimate={estimate} cap={cap} />
+      <ValueBand ask={ask} value={valueOk ? estimate : null} confidence={confidence} />
 
-      {needsReconfirm ? (
-        <div className="rounded-[var(--radius-card)] border border-accent/60 bg-surface p-3 text-sm">
-          <p className="font-medium">New possible score</p>
-          <p className="mt-1">
-            <ScoreRange cap={cap} /> · {nInd} independent {nInd === 1 ? "valuation" : "valuations"} now on file
-          </p>
-        </div>
-      ) : null}
+      <ConfidencePicker value={confidence} onChange={(c) => setConfidence(c)} estimate={valueOk ? estimate : null} />
 
-      <div>
-        <label htmlFor={`why-${snapshotId}`} className="label">
-          Why? <span className="text-muted">(optional, private, 500 characters)</span>
+      <details className="text-sm">
+        <summary className="flex min-h-11 cursor-pointer items-center text-muted hover:text-text">Add a private note (optional)</summary>
+        <label htmlFor={`why-${id}`} className="label mt-1">
+          Why you picked this number. Only you see it.
         </label>
         <textarea
-          id={`why-${snapshotId}`}
+          id={`why-${id}`}
           name="rationale"
           className="input"
           maxLength={500}
           rows={3}
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
-          placeholder="Your reasoning, for your own record."
-          aria-describedby={`why-hint-${snapshotId}`}
+          aria-describedby={`why-hint-${id}`}
         />
-        <p id={`why-hint-${snapshotId}`} className="mt-1 flex justify-between text-xs text-muted">
-          <span>Do not include confidential or NDA-restricted information. Nobody else sees this note.</span>
+        <p id={`why-hint-${id}`} className="mt-1 flex justify-between gap-3 text-xs text-muted">
+          <span>Leave out anything confidential or covered by an NDA.</span>
           <span className="figures">{rationale.length}/500</span>
         </p>
-      </div>
-
-      {needsTerms ? <TermsCheckbox checked={terms} onChange={setTerms} id={`terms-${snapshotId}`} /> : null}
+      </details>
 
       {notice ? (
         <Notice tone={notice.tone} title={notice.title}>
@@ -155,15 +168,13 @@ export function ValuationForm({
         </Notice>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" size={compact ? "md" : "lg"} disabled={!canSubmit}>
-          {pending ? "Sealing" : needsReconfirm ? "Confirm new range and submit" : done ? "Sealed" : "Submit valuation"}
+      <div className={`flex flex-col gap-2.5 ${compact ? "" : "sticky bottom-[72px] z-10 -mx-5 bg-bg px-5 pb-3 pt-2 md:static md:mx-0 md:bg-transparent md:p-0"}`}>
+        <StakeTile cap={cap} changed={needsReconfirm} />
+        {needsTerms ? <TermsCheckbox checked={terms} onChange={setTerms} id={`terms-${id}`} /> : null}
+        <Button type="submit" size="lg" className="w-full" disabled={!canSubmit}>
+          {pending ? "Locking in" : done ? "Locked in" : "Lock in my valuation"}
         </Button>
-        <span className="text-sm text-muted">
-          Frozen on submit: <ScoreRange cap={cap} />
-        </span>
       </div>
-      <p className="text-xs text-muted">Your balance may rise or fall as additional independent opinions arrive. Scores reflect agreement with later opinions, not verified accuracy.</p>
     </form>
   );
 }

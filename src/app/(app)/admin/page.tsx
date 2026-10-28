@@ -54,7 +54,7 @@ async function SourcesTab() {
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="text-base font-semibold">Record a domain</h2>
+        <h2 className="text-[17px] font-semibold">Record a domain</h2>
         <p className="mt-1 text-sm text-muted">
           Sources are permissionless: any public broker page is accepted and its domain is recorded on first submission. Use this to pre-register an operator
           source, set attribution text, or add a domain to the excluded list.
@@ -118,7 +118,7 @@ async function ReviewTab() {
           <Card as="li" key={s.id}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold">{s.headline}</h2>
+                <h2 className="text-[19px] font-bold">{s.headline}</h2>
                 <p className="text-sm text-muted">
                   {s.industry} · {locationText(s)} · {s.source_domain} · submitted {fmtDate(s.created_at)}
                   {s.submitted_by ? ` by ${emails.get(s.submitted_by) ?? "unknown"}` : ""}
@@ -202,7 +202,7 @@ async function InvitesTab() {
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="text-base font-semibold">Send a valuation request</h2>
+        <h2 className="text-[17px] font-semibold">Send a valuation request</h2>
         <p className="mt-1 text-sm text-muted">
           Same as the invite API: creates the buyer&apos;s account if needed, onboards the listing URL if it is new, and emails a link that signs them in and opens the
           valuation form. Usually sent automatically by the buyer-qualification system after 1 to 2 weeks with materials.
@@ -246,7 +246,7 @@ async function InvitesTab() {
       </div>
       {outbox.length ? (
         <Card>
-          <h2 className="text-base font-semibold">Recent emails (outbox)</h2>
+          <h2 className="text-[17px] font-semibold">Recent emails (outbox)</h2>
           <p className="mt-1 text-sm text-muted">&quot;captured&quot; means sending is not configured yet (no RESEND_API_KEY / MAIL_FROM, or MAIL_CAPTURE=1); the email was recorded but not delivered.</p>
           <ul className="mt-2 divide-y divide-border text-sm">
             {outbox.map((m) => (
@@ -263,13 +263,13 @@ async function InvitesTab() {
         </Card>
       ) : null}
       <Card>
-        <h2 className="text-base font-semibold">Invite emails</h2>
+        <h2 className="text-[17px] font-semibold">Invite emails</h2>
         <p className="mt-1 text-sm text-muted">Adding an email lets that person past the waitlist. Existing accounts are flipped immediately.</p>
         <AddInviteForm />
       </Card>
       {waiting.length ? (
         <Card>
-          <h2 className="text-base font-semibold">Waiting ({waiting.length})</h2>
+          <h2 className="text-[17px] font-semibold">Waiting ({waiting.length})</h2>
           <ul className="mt-2 divide-y divide-border text-sm">
             {waiting.map((p) => (
               <li key={p.email} className="flex items-center justify-between gap-3 py-2">
@@ -337,7 +337,7 @@ async function ScoringTab() {
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold">
+            <h2 className="text-[17px] font-semibold">
               Scoring mode: <span className={mode === "shadow" ? "text-accent-text" : "text-pos"}>{mode}</span>
             </h2>
             <p className="mt-1 text-sm text-muted">
@@ -350,19 +350,19 @@ async function ScoringTab() {
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div>
             <dt className="text-xs text-muted">Approved snapshots</dt>
-            <dd className="figures text-lg">{approved ?? 0}</dd>
+            <dd className="figures text-[18px] font-bold">{approved ?? 0}</dd>
           </div>
           <div>
             <dt className="text-xs text-muted">Forecasts</dt>
-            <dd className="figures text-lg">{forecasts ?? 0}</dd>
+            <dd className="figures text-[18px] font-bold">{forecasts ?? 0}</dd>
           </div>
           <div>
             <dt className="text-xs text-muted">Score evaluations</dt>
-            <dd className="figures text-lg">{evals ?? 0}</dd>
+            <dd className="figures text-[18px] font-bold">{evals ?? 0}</dd>
           </div>
           <div>
             <dt className="text-xs text-muted">Last aggregate refresh</dt>
-            <dd className="figures text-lg">{last ? new Date(last).toLocaleString("en-US", { timeZone: "UTC", hour12: false }) + " UTC" : "never"}</dd>
+            <dd className="figures text-[18px] font-bold">{last ? new Date(last).toLocaleString("en-US", { timeZone: "UTC", hour12: false }) + " UTC" : "never"}</dd>
           </div>
         </dl>
       </Card>

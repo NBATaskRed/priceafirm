@@ -2,18 +2,47 @@ import Link from "next/link";
 import { requireMember } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ForecastRow, LedgerRow, ListingSnapshot } from "@/lib/domain/types";
-import { BALANCE_SENTENCE, CONFIDENCE_LABEL, Card, EmptyState, Money, PageHeader, Points, ScoreRange, fmtDate, locationText } from "@/components/ui";
+import { CONFIDENCE_LABEL, EmptyState, fmtPoints, fmtShort } from "@/components/ui";
 
-export const metadata = { title: "My Points" };
+export const metadata = { title: "My points" };
 
-const KIND_LABEL: Record<LedgerRow["kind"], string> = {
-  WELCOME_GRANT: "Welcome grant",
-  URL_REVEAL: "URL reveal",
-  URL_REVEAL_FREE: "URL reveal (free)",
-  SCORE_CHANGE: "Score change",
-  REFUND: "Refund",
-  ADMIN_ADJUSTMENT: "Adjustment",
-};
+type SnapLite = Pick<ListingSnapshot, "id" | "business_id" | "headline" | "state">;
+
+interface Move {
+  key: string;
+  at: string;
+  title: string;
+  reason: string;
+  amount: number;
+  tone: "pos" | "neg" | "plain" | "muted";
+}
+
+function signed(n: number): string {
+  const s = Math.abs(n).toFixed(1);
+  if (Math.abs(n) < 0.05) return "0.0";
+  return n > 0 ? `+${s}` : `−${s}`;
+}
+
+function reasonFor(row: LedgerRow): { reason: string; tone: Move["tone"] } | null {
+  const a = Number(row.amount);
+  switch (row.kind) {
+    case "SCORE_CHANGE":
+      if (Math.abs(a) < 0.05) return null;
+      return a > 0 ? { reason: "A new buyer landed close to you", tone: "pos" } : { reason: "A new buyer landed far from you", tone: "neg" };
+    case "URL_REVEAL":
+      return { reason: "Opened the broker listing", tone: "plain" };
+    case "URL_REVEAL_FREE":
+      return { reason: "Opened the broker listing, free", tone: "muted" };
+    case "WELCOME_GRANT":
+      return { reason: "Welcome points", tone: "pos" };
+    case "REFUND":
+      return { reason: "Refund", tone: a >= 0 ? "pos" : "neg" };
+    case "ADMIN_ADJUSTMENT":
+      return { reason: "Adjusted by PriceAFirm", tone: a >= 0 ? "pos" : "neg" };
+  }
+}
+
+const TONE: Record<Move["tone"], string> = { pos: "text-pos", neg: "text-neg", plain: "text-text", muted: "text-muted" };
 
 export default async function PointsPage() {
   const { user, profile, balance } = await requireMember();
@@ -29,169 +58,140 @@ export default async function PointsPage() {
   const ledger = (lg ?? []) as LedgerRow[];
   const skill = sk as { scored_count: number; percentile: number | null; sufficient: boolean } | null;
 
-  const snapIds = [...new Set(forecasts.map((f) => f.snapshot_id))];
-  const { data: sn } = snapIds.length ? await admin.from("listing_snapshots").select("id,headline,industry,state,region,metro").in("id", snapIds) : { data: [] };
-  const snaps = new Map<string, Pick<ListingSnapshot, "id" | "headline" | "industry" | "state" | "region" | "metro">>();
-  for (const s of (sn ?? []) as Array<Pick<ListingSnapshot, "id" | "headline" | "industry" | "state" | "region" | "metro">>) snaps.set(s.id, s);
+  const businessIds = [...new Set([...forecasts.map((f) => f.business_id), ...ledger.map((l) => l.business_id).filter((b): b is string => Boolean(b))])];
+  const { data: sn } = businessIds.length
+    ? await admin.from("listing_snapshots").select("id,business_id,headline,state").in("business_id", businessIds)
+    : { data: [] as SnapLite[] };
+  const byBusiness = new Map<string, SnapLite>();
+  for (const s of (sn ?? []) as SnapLite[]) if (!byBusiness.has(s.business_id)) byBusiness.set(s.business_id, s);
+  const titleFor = (businessId: string | null) => {
+    const s = businessId ? byBusiness.get(businessId) : null;
+    return s ? [s.headline, s.state].filter(Boolean).join(", ") : "PriceAFirm";
+  };
 
-  const scoredCount = forecasts.filter((f) => Number(f.current_score) !== 0).length;
-  const floorClipped = Number((profile as unknown as { first5_floor_clipped?: number }).first5_floor_clipped ?? 0);
-  const first5Done = forecasts.filter((f) => !f.voided_at).length >= 5;
+  // Recent moves: ledger rows in plain words, plus valuations still waiting for other buyers.
+  const moved = new Set(ledger.filter((l) => l.kind === "SCORE_CHANGE" && l.forecast_id).map((l) => l.forecast_id as string));
+  const moves: Move[] = [];
+  for (const row of ledger) {
+    const r = reasonFor(row);
+    if (!r) continue;
+    moves.push({ key: `l${row.id}`, at: row.created_at, title: titleFor(row.business_id), reason: r.reason, amount: Number(row.amount), tone: r.tone });
+  }
+  for (const f of forecasts) {
+    if (f.voided_at || moved.has(f.id) || Math.abs(Number(f.current_score)) >= 0.05) continue;
+    moves.push({ key: `f${f.id}`, at: f.created_at, title: titleFor(f.business_id), reason: "Locked in, waiting for other buyers", amount: 0, tone: "muted" });
+  }
+  moves.sort((a, b) => b.at.localeCompare(a.at));
+  const recent = moves.slice(0, 12);
+
+  const live = forecasts.filter((f) => !f.voided_at);
+  const earned = live.reduce((s, f) => s + Number(f.current_score), 0);
+  const used = Math.min(5, live.length);
+  const floorClipped = Number(profile.first5_floor_clipped ?? 0);
+  const opens = Math.max(0, Math.floor(balance));
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader title="My points" lede={BALANCE_SENTENCE} />
+    <div className="mx-auto flex max-w-[560px] flex-col gap-[18px]">
+      <h1 className="sr-only">My points</h1>
+      <section className="flex flex-col gap-1">
+        <span className="text-[15px] text-muted">Your balance</span>
+        <span className="figures text-[64px] font-extrabold leading-none tracking-[-0.02em] text-accent-text">{fmtPoints(balance)}</span>
+        <span className="text-[15px] text-text-soft">
+          {opens > 0 ? `points, enough to open ${opens} well-valued ${opens === 1 ? "listing" : "listings"}` : "points. Value a business to earn more."}
+        </span>
+      </section>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="sm:col-span-1">
-          <p className="text-xs text-muted">Balance</p>
-          <p className="figures mt-1 text-4xl font-semibold">
-            {balance.toFixed(1).replace("-", "−")} <span className="text-base font-medium text-muted">pts</span>
-          </p>
-          <p className="mt-2 text-xs text-muted">{balance < 1 ? "Below the 1 point needed for a new URL reveal. Already-unlocked URLs stay open." : "Enough for a URL reveal."}</p>
-        </Card>
-        <Card>
-          <p className="text-xs text-muted">Valuations</p>
-          <p className="figures mt-1 text-4xl font-semibold">{forecasts.length}</p>
-          <p className="mt-2 text-xs text-muted">{scoredCount} with a non-zero score so far</p>
-        </Card>
-        <Card>
-          <p className="text-xs text-muted">URLs unlocked</p>
-          <p className="figures mt-1 text-4xl font-semibold">{unlockCount ?? 0}</p>
-          <p className="mt-2 text-xs text-muted">
-            <Link href="/unlocked" className="underline hover:text-text">
-              My unlocked listings
-            </Link>
-          </p>
-        </Card>
-      </div>
+      <dl className="grid grid-cols-3 gap-2">
+        <div className="tile flex flex-col-reverse p-3">
+          <dt className="tile-label mt-0.5">valued</dt>
+          <dd className="figures text-[22px] font-bold">{forecasts.length}</dd>
+        </div>
+        <div className="tile flex flex-col-reverse p-3">
+          <dt className="tile-label mt-0.5">listings opened</dt>
+          <dd className="figures text-[22px] font-bold">{unlockCount ?? 0}</dd>
+        </div>
+        <div className="tile flex flex-col-reverse p-3">
+          <dt className="tile-label mt-0.5">earned so far</dt>
+          <dd className="figures text-[22px] font-bold">{signed(earned)}</dd>
+        </div>
+      </dl>
 
-      <Card className="mt-4">
-        <p className="text-xs text-muted">Newcomer floor</p>
-        <p className="mt-1 text-sm">
-          Across your first 5 scored forecasts, your cumulative posted loss is floored at &minus;3.0.{" "}
-          {first5Done ? (
-            <span className="text-muted">Your first 5 are complete; the floor no longer applies to new forecasts.</span>
-          ) : (
-            <span className="text-muted">{5 - forecasts.filter((f) => !f.voided_at).length} of your first 5 remain under the floor.</span>
-          )}
-        </p>
-        <p className="mt-1 text-xs text-muted">
-          {floorClipped > 0 ? (
-            <>
-              The floor has absorbed <span className="figures text-text">{floorClipped.toFixed(1)}</span> points of loss so far.
-            </>
-          ) : (
-            "The floor has not been needed so far."
-          )}
-        </p>
-      </Card>
-
-      <Card className="mt-4">
-        <p className="text-xs text-muted">Skill percentile</p>
-        {skill?.sufficient && skill.percentile != null ? (
-          <p className="mt-1">
-            <span className="figures text-2xl font-semibold">{ordinal(Math.round(skill.percentile))} percentile</span>
-            <span className="ml-2 text-sm text-muted">· provisional · peer-predictive, not verified accuracy</span>
-          </p>
-        ) : (
-          <p className="mt-1 text-sm text-muted">Not enough evidence for a meaningful skill percentile yet (needs 5 scored forecasts). You have {skill?.scored_count ?? 0}.</p>
-        )}
-      </Card>
-
-      <section className="mt-10">
-        <h2 className="mb-3 text-lg font-semibold">Your valuations</h2>
-        {forecasts.length === 0 ? (
+      <section className="flex flex-col gap-1">
+        <h2 className="mb-1.5 text-[17px] font-semibold">Recent moves</h2>
+        {recent.length === 0 ? (
           <EmptyState
-            title="No valuations yet"
+            title="No moves yet"
             action={
               <Link href="/value" className="btn btn-primary btn-sm">
                 Value a business
               </Link>
             }
           >
-            Being first to value a listing carries the widest possible score range.
+            The fewer valuations a listing has, the more points are at stake.
           </EmptyState>
         ) : (
-          <div className="card overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Business</th>
-                  <th>Your value</th>
-                  <th>Confidence</th>
-                  <th>Possible score</th>
-                  <th>Score</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {forecasts.map((f) => {
-                  const s = snaps.get(f.snapshot_id);
-                  return (
-                    <tr key={f.id}>
-                      <td>
-                        <Link href={`/value/${f.snapshot_id}/done`} className="font-medium hover:underline">
-                          {s?.headline ?? "Listing"}
-                        </Link>
-                        <span className="block text-xs text-muted">{s ? `${s.industry} · ${locationText(s)}` : ""}</span>
-                      </td>
-                      <td>
-                        <Money value={Number(f.value)} />
-                      </td>
-                      <td>{CONFIDENCE_LABEL[f.confidence]}</td>
-                      <td>
-                        <ScoreRange cap={Number(f.cap)} />
-                      </td>
-                      <td>
-                        <Points value={Number(f.current_score)} words />
-                        <span className="block text-xs text-muted">{f.voided_at ? "voided" : "can change"}</span>
-                      </td>
-                      <td className="figures whitespace-nowrap text-muted">{fmtDate(f.created_at)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ul>
+            {recent.map((m) => (
+              <li key={m.key} className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-b-0">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="truncate text-[15px] font-semibold">{m.title}</span>
+                  <span className="text-[13px] text-muted">{m.reason}</span>
+                </div>
+                <span className={`figures text-[18px] font-bold ${TONE[m.tone]}`}>{signed(m.amount)}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 
-      <section className="mt-10">
-        <h2 className="mb-3 text-lg font-semibold">Ledger</h2>
-        <div className="card overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Kind</th>
-                <th>Amount</th>
-                <th>Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ledger.map((row) => (
-                <tr key={row.id}>
-                  <td className="figures whitespace-nowrap text-muted">{fmtDate(row.created_at)}</td>
-                  <td>{KIND_LABEL[row.kind]}</td>
-                  <td>
-                    <Points value={Number(row.amount)} />
-                  </td>
-                  <td className="text-muted">{row.note}</td>
-                </tr>
-              ))}
-              {ledger.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="text-muted">
-                    No ledger entries yet.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+      <section className="tile flex flex-col gap-2.5 rounded-[14px] px-4 py-3.5">
+        <h2 className="text-[15px] font-semibold">Beginner&apos;s protection</h2>
+        <div className="grid grid-cols-5 gap-1.5" aria-hidden="true">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className={`h-1.5 rounded-[3px] ${i < used ? "bg-accent" : "bg-border-strong"}`} />
+          ))}
         </div>
-        <p className="mt-2 text-xs text-muted">Amounts are shown to one decimal; the ledger stores four.</p>
+        <p className="text-sm leading-[1.45] text-text-soft">
+          {used < 5
+            ? `${used} of your first 5 valuations used. Until then, you can't lose more than 3 points in total on them.`
+            : "All of your first 5 valuations used. You can't lose more than 3 points in total on them; later valuations count in full."}
+          {floorClipped > 0 ? <> It has saved you <span className="figures">{floorClipped.toFixed(1)}</span> points so far.</> : null}
+        </p>
       </section>
+
+      <section className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-1">
+        <h2 className="text-[15px] font-normal text-muted">Your skill rank</h2>
+        <span className="text-[15px] text-text-soft">
+          {skill?.sufficient && skill.percentile != null
+            ? `${ordinal(Math.round(skill.percentile))} percentile, provisional`
+            : `Ready after 5 scored valuations (${skill?.scored_count ?? 0} so far)`}
+        </span>
+      </section>
+
+      {forecasts.length > 0 ? (
+        <details>
+          <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-muted hover:text-text">Your valuations ({forecasts.length})</summary>
+          <ul>
+            {forecasts.map((f) => (
+              <li key={f.id} className="border-b border-border last:border-b-0">
+                <Link href={`/value/${f.snapshot_id}/done`} className="flex items-center justify-between gap-3 py-3 no-underline hover:bg-surface-2">
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-[15px] font-semibold">{titleFor(f.business_id)}</span>
+                    <span className="text-[13px] text-muted">
+                      You said <span className="figures">{fmtShort(Number(f.value))}</span>, {CONFIDENCE_LABEL[f.confidence].toLowerCase()} confidence
+                      {f.voided_at ? ", voided" : ""}
+                    </span>
+                  </span>
+                  <span className={`figures text-[18px] font-bold ${Number(f.current_score) > 0.04 ? "text-pos" : Number(f.current_score) < -0.04 ? "text-neg" : "text-muted"}`}>
+                    {signed(Number(f.current_score))}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <p className="text-xs text-muted">Points aren&apos;t cash. Your score is peer-predictive: it shows how close your valuations land to later buyers&apos; valuations.</p>
     </div>
   );
 }

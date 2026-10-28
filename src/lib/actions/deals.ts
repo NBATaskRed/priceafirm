@@ -80,7 +80,7 @@ export async function searchDealsAction(text: string, page = 1, minValuations = 
 
   const jar = await cookies();
   if (jar.get(DEALS_GATE_COOKIE)?.value !== "1") {
-    return { status: "gate_required", message: "Confirm that you understand listings here include crowd valuations before searching." };
+    return { status: "gate_required", message: "Read the note before you look, then choose Show me deals." };
   }
   if (await searchRateLimited(user.id)) return { status: "rate_limited", message: "You have reached 60 searches this hour. Try again a little later." };
 
@@ -187,7 +187,7 @@ export async function revealUrlAction(businessId: string): Promise<RevealUrlResu
   const { data, error } = await supabaseAdmin().rpc("reveal_url", { p_user: user.id, p_business: businessId });
   if (error) {
     console.error("reveal_url failed", error);
-    return { status: "invalid", message: "Could not reveal the URL. Try again.", balance };
+    return { status: "invalid", message: "Could not open the broker listing. Try again.", balance };
   }
   const row = (data as Array<{ url: string | null; charged: boolean; balance: number; status: string }>)[0];
   if (!row) return { status: "not_found", message: "This listing is no longer available.", balance };
@@ -205,9 +205,9 @@ export async function revealUrlAction(businessId: string): Promise<RevealUrlResu
     case "removed":
       return { status: "removed", message: "This listing was removed at the publisher's request.", balance: newBalance };
     case "rate_limited":
-      return { status: "rate_limited", message: "You have reached the daily limit of free reveals. Try again tomorrow.", balance: newBalance };
+      return { status: "rate_limited", message: "You have opened the most free broker listings allowed today. Try again tomorrow.", balance: newBalance };
     case "no_url":
-      return { status: "no_url", message: "No listing URL is stored for this business.", balance: newBalance };
+      return { status: "no_url", message: "No broker listing link is stored for this business.", balance: newBalance };
     default:
       return { status: "not_found", message: "This listing is no longer available.", balance: newBalance };
   }

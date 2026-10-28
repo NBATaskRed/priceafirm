@@ -167,7 +167,7 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
   }
   const input = parsed.data;
   if (input.withValuation && (!input.value || !input.confidence)) {
-    return { status: "invalid", message: "Enter an enterprise value and pick a confidence, or choose Submit URL only." };
+    return { status: "invalid", message: "Enter your number and pick how sure you are, or choose Add the listing only." };
   }
 
   // Terms acknowledgement before the first contribution (URL or valuation).
@@ -176,7 +176,7 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
     await acceptTerms(user.id);
   }
   if (input.withValuation && (await forecastRateLimited(user.id))) {
-    return { status: "rate_limited", message: "You have reached the limit of 20 valuations in 24 hours. You can still submit the URL only." };
+    return { status: "rate_limited", message: "You have reached the limit of 20 valuations in 24 hours. You can still add the listing only." };
   }
 
   // Re-validate the URL server side: blocked domains never proceed, even if the client lied.
@@ -276,7 +276,7 @@ export async function submitListingAction(formData: FormData): Promise<SubmitLis
     if (sealed.status === "sealed") {
       return { status: "approved", snapshotId: created.snapshotId, businessId: created.businessId, valuation: "sealed", cap: sealed.cap };
     }
-    const msg = sealed.status === "bounds_changed" ? "The possible score range changed before sealing. Open the listing to value it with the current range." : sealed.message;
+    const msg = sealed.status === "bounds_changed" ? "Another buyer valued this first, so the points at stake changed. Open the listing to lock in your valuation." : sealed.message;
     return { status: "approved", snapshotId: created.snapshotId, businessId: created.businessId, valuation: "failed", valuationMessage: msg };
   } catch (err) {
     console.error("sealForecast failed", err);

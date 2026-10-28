@@ -72,3 +72,61 @@ export function MoneyInput({
     </div>
   );
 }
+
+/**
+ * The large borderless figure input on the valuation form (spec 4.2 item 3): 40px figures, "$" prefix
+ * in stone, amber underline on focus. The help row underneath carries the EV note and live multiple.
+ */
+export function EvInput({
+  id,
+  label,
+  value,
+  onChange,
+  multiple,
+  autoFocus = false,
+  disabled = false,
+  note = "Cash-free, debt-free enterprise value",
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (digits: string) => void;
+  multiple: string | null;
+  autoFocus?: boolean;
+  disabled?: boolean;
+  note?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <label htmlFor={id} className="text-[17px] font-semibold">
+        {label}
+      </label>
+      <div className="ev-wrap">
+        <span aria-hidden="true" className="figures text-[40px] font-bold leading-[1.15] text-muted">
+          $
+        </span>
+        <input
+          id={id}
+          name="value"
+          className="ev-input figures"
+          inputMode="numeric"
+          autoComplete="off"
+          autoFocus={autoFocus}
+          disabled={disabled}
+          placeholder="0"
+          value={formatDigits(value)}
+          onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, "").slice(0, 11))}
+          aria-describedby={`${id}-help`}
+        />
+      </div>
+      <p id={`${id}-help`} className="flex flex-wrap justify-between gap-x-3 text-sm text-muted">
+        <span>{note}</span>
+        {multiple ? (
+          <span className="figures font-semibold text-text" aria-live="polite">
+            {multiple}
+          </span>
+        ) : null}
+      </p>
+    </div>
+  );
+}

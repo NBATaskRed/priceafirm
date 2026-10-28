@@ -8,7 +8,7 @@ export default function TermsPage() {
       <LegalSection title="What PriceAFirm is">
         <p>
           PriceAFirm collects independent valuations of businesses that are already listed for sale on sources that have cleared a rights review. We pool
-          those valuations into model-derived crowd statistics and let members spend points to reveal the original listing URLs.
+          those valuations into model-derived statistics of what buyers think and let members spend points to reveal the original listing URLs.
         </p>
         <p>
           PriceAFirm is a research and discovery tool. It is not a broker, an appraiser, an investment adviser or a marketplace. Nothing on the site is an
@@ -52,11 +52,11 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="Find Deals and eligibility">
+      <LegalSection title="Find deals and eligibility">
         <p>
-          Listings in Find Deals include crowd valuations. Any listing you see there can no longer earn you points: once the crowd figure has been shown to
+          Listings in Find deals show what other buyers think they are worth. Any listing you see there can no longer earn you points: once that figure has been shown to
           you, a blind valuation of that business can no longer be scored. Searching costs nothing and this effect is permanent; a notice says so before
-          your first search in each session. If you want to value a listing first, use Value Businesses.
+          your first search in each session. If you want to value a listing first, use Value businesses.
         </p>
       </LegalSection>
 
@@ -70,7 +70,7 @@ export default function TermsPage() {
 
       <LegalSection title="No promises">
         <p>
-          Crowd statistics are model outputs built from a small number of opinions and documented conventions. They can be wrong, thin or stale. We make
+          Buyers&apos; view statistics are model outputs built from a small number of opinions and documented conventions. They can be wrong, thin or stale. We make
           no promise about the accuracy of any figure, the availability of any listing, the behaviour of any source site, or the future value of points.
           Use your own diligence before acting on anything you see here.
         </p>

@@ -9,8 +9,8 @@ export default function PrivacyPage() {
         <ul className="list-disc space-y-1 pl-5">
           <li>Your email address, used to sign you in and to decide whether you are on the pilot invite list.</li>
           <li>Your valuations: the business, your enterprise value estimate, your confidence choice, the time, and your optional private note.</li>
-          <li>Your searches in Find Deals, the filters we interpreted from them, and the number of results.</li>
-          <li>Which listings were shown to you in Find Deals and which listing URLs you revealed, with timestamps.</li>
+          <li>Your searches in Find deals, the filters we interpreted from them, and the number of results.</li>
+          <li>Which listings were shown to you in Find deals and which listing URLs you revealed, with timestamps.</li>
           <li>Listing URLs you add, the neutral facts you enter, and a hash of the URL used to detect duplicates.</li>
           <li>A point ledger recording every change to your balance and why it happened.</li>
           <li>An optional buyer profile (states, industries, minimum earnings) if you choose to set one, used only to sort your Value queue.</li>
@@ -19,8 +19,8 @@ export default function PrivacyPage() {
 
       <LegalSection title="How we use it">
         <p>
-          Valuations feed the crowd statistics and the scoring that moves your balance. Exposure records (Find Deals rows and reveals) enforce the rule that a
-          member who has seen crowd information about a business cannot submit a scored blind valuation of it. Search logs help us improve the search
+          Valuations feed the buyers&apos; view statistics and the scoring that moves your balance. Exposure records (Find deals rows and reveals) enforce the rule that a
+          member who has seen what buyers think of a business cannot submit a scored blind valuation of it. Search logs help us improve the search
           interpreter. Email domains group related accounts so that one firm counts as one independent voice in the statistics.
         </p>
       </LegalSection>

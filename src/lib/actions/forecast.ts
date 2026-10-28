@@ -91,7 +91,7 @@ export async function submitForecastAction(formData: FormData): Promise<SubmitFo
       contractToken: result.question.contractToken,
       cap: result.question.cap,
       nInd: result.question.nInd,
-      message: "Another independent valuation arrived while this form was open, so the possible score range changed. Confirm the new range to submit.",
+      message: "Another buyer just valued this, so the points at stake changed. Tap Lock in my valuation again to confirm.",
     };
   }
   if (result.status === "rate_limited") return { status: "rate_limited", message: result.message };
