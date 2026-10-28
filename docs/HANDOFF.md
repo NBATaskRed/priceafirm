@@ -63,9 +63,8 @@ Spec of record: `docs/DESIGN.md`. Working rules for agents: `CLAUDE.md`.
 - Fixed: ledger postings keyed per evaluation (untriggered recomputes could post only once); newcomer floor
   spillover to the buyer's other first-5 forecasts is now posted.
 - Verified Oct 28: DB smoke test (incl. repeat recompute and score = sum of deltas), 82 tests, typecheck, build, simulation all pass.
-- Design canvas "PriceAFirm UX": Email, Valuation form, Points, Value queue done. To do: Find deals artboard;
-  fix the form to show possible score +/-5.8 (2 prior valuations) and the reveal as 1 point (count 3 includes
-  the buyer; owner chose NOT to exclude own valuation).
+- Design canvas "PriceAFirm UX": all five screens done (Oct 28). Written up as docs/UX_SPEC.md, DRAFT pending
+  owner approval; once approved, implement it across all screens (fonts Hanken Grotesk + Archivo wide).
 - Design doc Section 6.3 rewritten for the quadratic rule (Oct 28).
 
 ## UI and UX: design is being finished separately (do not diverge)
